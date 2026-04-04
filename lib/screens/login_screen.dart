@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wsfm/cubits/auth/auth_cubit.dart';
 import 'package:wsfm/cubits/auth/auth_state.dart';
-import 'package:wsfm/screens/dashboard_screen.dart';
+import 'package:wsfm/screens/admin_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -126,7 +126,8 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => const DashboardScreen(),
+              // For simplicity, we navigate to the same AdminDashboardScreen for all roles in this example.
+              builder: (_) => const AdminDashboardScreen(),
             ),
           );
         }
