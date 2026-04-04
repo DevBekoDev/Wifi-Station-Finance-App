@@ -1,5 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:wsfm/cubits/auth/auth_cubit.dart';
 import 'package:wsfm/screens/login_screen.dart';
 import 'package:wsfm/utils/constants/app_theme.dart';
 import 'services/firebase_options.dart';
@@ -24,7 +26,7 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      home: const LoginScreen(),
+      home: BlocProvider(create: (context) => AuthCubit() ,child: const LoginScreen()),
     );
   }
 }
