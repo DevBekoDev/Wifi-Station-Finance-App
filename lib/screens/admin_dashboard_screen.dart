@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wsfm/cubits/admin_dashboard/admin_dashboard_cubit.dart';
 import 'package:wsfm/cubits/admin_dashboard/admin_dashboard_state.dart';
+import 'package:wsfm/screens/create_center_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
@@ -75,21 +77,61 @@ class AdminDashboardScreen extends StatelessWidget {
                     ),
 
                     const SizedBox(height: 22),
-
                     _SectionTitle(
-                      title: 'Performance Leaderboard',
-                      actionText: 'See all',
+                      title: 'Active Centers',
+                      actionText: 'Manage',
                       onTap: () {},
                     ),
                     const SizedBox(height: 12),
 
-                    ...data.leaderboard.map(
-                      (item) => _LeaderboardTile(
-                        rank: item['rank'],
-                        name: item['name'],
-                        location: item['location'],
-                        profit: item['profit'].toDouble(),
-                      ),
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('centers')
+                          .orderBy('createdAt', descending: true)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Padding(
+                            padding: EdgeInsets.only(top: 20),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+
+                        if (snapshot.hasError) {
+                          return const Padding(
+                            padding: EdgeInsets.only(top: 20),
+                            child: Text(
+                              'Failed to load centers',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          );
+                        }
+
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.only(top: 20),
+                            child: Text(
+                              'No centers found',
+                              style: TextStyle(color: Colors.black54),
+                            ),
+                          );
+                        }
+
+                        final docs = snapshot.data!.docs;
+
+                        return Column(
+                          children: docs.map((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+
+                            return _CenterTile(
+                              name: data['name'] ?? 'Unknown Center',
+                              location: data['location'] ?? 'Unknown Location',
+                              manager: data['managerName'] ?? 'No Manager',
+                            );
+                          }).toList(),
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 22),
@@ -112,17 +154,27 @@ class AdminDashboardScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
 
-                    const Row(
+                    Row(
                       children: [
                         Expanded(
-                          child: _QuickActionCard(
-                            title: 'Create Center',
-                            subtitle: 'Add a new WiFi station',
-                            icon: Icons.add_business_rounded,
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CreateCenterScreen(),
+                                ),
+                              );
+                            },
+                            child: const _QuickActionCard(
+                              title: 'Create Center',
+                              subtitle: 'Add a new WiFi station',
+                              icon: Icons.add_business_rounded,
+                            ),
                           ),
                         ),
-                        SizedBox(width: 12),
-                        Expanded(
+                        const SizedBox(width: 12),
+                        const Expanded(
                           child: _QuickActionCard(
                             title: 'Add Manager',
                             subtitle: 'Generate manager account',
@@ -131,7 +183,6 @@ class AdminDashboardScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 22),
 
                     _SectionTitle(
@@ -179,10 +230,7 @@ class _TopHeader extends StatelessWidget {
               SizedBox(height: 6),
               Text(
                 'Monitor centers, compare performance, and manage operations.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.black54,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.black54),
               ),
             ],
           ),
@@ -258,10 +306,7 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
-            ),
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
         ],
       ),
@@ -358,10 +403,7 @@ class _LeaderboardTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  location,
-                  style: const TextStyle(color: Colors.black54),
-                ),
+                Text(location, style: const TextStyle(color: Colors.black54)),
               ],
             ),
           ),
@@ -409,10 +451,7 @@ class _MonthlyReportCard extends StatelessWidget {
                 SizedBox(height: 8),
                 Text(
                   'Open the monthly report to review revenue, expenses, and center comparisons.',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    height: 1.4,
-                  ),
+                  style: TextStyle(color: Colors.white70, height: 1.4),
                 ),
               ],
             ),
@@ -470,10 +509,7 @@ class _QuickActionCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontSize: 13,
-            ),
+            style: const TextStyle(color: Colors.black54, fontSize: 13),
           ),
         ],
       ),
