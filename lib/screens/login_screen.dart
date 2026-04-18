@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wsfm/cubits/auth/auth_cubit.dart';
 import 'package:wsfm/cubits/auth/auth_state.dart';
 import 'package:wsfm/screens/admin_dashboard_screen.dart';
+import 'package:wsfm/screens/manager_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -121,16 +122,24 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         if (state is AuthSuccess) {
-          debugPrint("AuthSuccess role: ${state.role}, centerId: ${state.centerId}");
-
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              // For simplicity, we navigate to the same AdminDashboardScreen for all roles in this example.
-              builder: (_) => const AdminDashboardScreen(),
-            ),
-          );
-        }
+  if (state.role == 'admin') {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AdminDashboardScreen(),
+      ),
+    );
+  } else if (state.role == 'manager') {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ManagerDashboardScreen(
+          centerId: state.centerId ?? '',
+        ),
+      ),
+    );
+  }
+}
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFE0F2F1),
