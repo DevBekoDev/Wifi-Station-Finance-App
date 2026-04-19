@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:wsfm/cubits/admin_reports/admin_reports_cubit.dart';
 import 'package:wsfm/cubits/admin_reports/admin_reports_state.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:wsfm/services/admin_report_export_servive.dart';
+
 
 class AdminReportsScreen extends StatelessWidget {
   const AdminReportsScreen({super.key});
+
   Future<void> _exportCsv(BuildContext context, AdminReportsLoaded data) async {
     try {
       final file = await AdminReportExportService().exportAdminReportCsv(
         rows: data.records,
       );
 
-      await Share.shareXFiles([XFile(file.path)], text: 'Admin report export');
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Admin report export',
+      );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to export report.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to export report.')),
+      );
     }
   }
 
@@ -25,256 +30,257 @@ class AdminReportsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => AdminReportsCubit()..loadReports(),
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF5F7FB),
-        appBar: AppBar(
-  elevation: 0,
-  backgroundColor: Colors.transparent,
-  foregroundColor: const Color(0xFF0F172A),
-  title: const Text(
-    'Admin Reports',
-    style: TextStyle(fontWeight: FontWeight.bold),
-  ),
-  actions: [
-    if (state is AdminReportsLoaded)
-      IconButton(
-        tooltip: 'Download CSV',
-        onPressed: state.records.isEmpty
-            ? null
-            : () => _exportCsv(context, state),
-        icon: const Icon(Icons.download_rounded),
-      ),
-  ],
-),
-        body: SafeArea(
-          child: BlocBuilder<AdminReportsCubit, AdminReportsState>(
-            builder: (context, state) {
-              if (state is AdminReportsInitial ||
-                  state is AdminReportsLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              if (state is AdminReportsError) {
-                return Center(
-                  child: Text(
-                    state.message,
-                    style: const TextStyle(color: Colors.red),
+      child: BlocBuilder<AdminReportsCubit, AdminReportsState>(
+        builder: (context, state) {
+          return Scaffold(
+            backgroundColor: const Color(0xFFF5F7FB),
+            appBar: AppBar(
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              foregroundColor: const Color(0xFF0F172A),
+              title: const Text(
+                'Admin Reports',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              actions: [
+                if (state is AdminReportsLoaded)
+                  IconButton(
+                    tooltip: 'Download CSV',
+                    onPressed: state.records.isEmpty
+                        ? null
+                        : () => _exportCsv(context, state),
+                    icon: const Icon(Icons.download_rounded),
                   ),
-                );
-              }
+              ],
+            ),
+            body: SafeArea(
+              child: _buildBody(context, state),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
-              final data = state as AdminReportsLoaded;
+  Widget _buildBody(BuildContext context, AdminReportsState state) {
+    if (state is AdminReportsInitial || state is AdminReportsLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-              return RefreshIndicator(
-                onRefresh: () async {
-                  await context.read<AdminReportsCubit>().loadReports();
-                },
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF00695C), Color(0xFF00897B)],
-                        ),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'System Report',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Monitor all centers, revenue, expenses, and profit performance.',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+    if (state is AdminReportsError) {
+      return Center(
+        child: Text(
+          state.message,
+          style: const TextStyle(color: Colors.red),
+        ),
+      );
+    }
 
-                    const SizedBox(height: 20),
+    final data = state as AdminReportsLoaded;
 
-                    DropdownButtonFormField<AdminReportPeriod>(
-                      value: data.selectedPeriod,
-                      decoration: InputDecoration(
-                        labelText: 'Period',
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: AdminReportPeriod.all,
-                          child: Text('All Time'),
-                        ),
-                        DropdownMenuItem(
-                          value: AdminReportPeriod.today,
-                          child: Text('Today'),
-                        ),
-                        DropdownMenuItem(
-                          value: AdminReportPeriod.week,
-                          child: Text('This Week'),
-                        ),
-                        DropdownMenuItem(
-                          value: AdminReportPeriod.month,
-                          child: Text('This Month'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          context.read<AdminReportsCubit>().changePeriod(value);
-                        }
-                      },
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 1.05,
-                      children: [
-                        _SummaryCard(
-                          title: 'Centers',
-                          value: data.totalCenters.toString(),
-                          subtitle: 'Active centers',
-                          icon: Icons.wifi_rounded,
-                        ),
-                        _SummaryCard(
-                          title: 'Revenue',
-                          value: data.totalSales.toStringAsFixed(0),
-                          subtitle: 'Filtered sales',
-                          icon: Icons.trending_up_rounded,
-                        ),
-                        _SummaryCard(
-                          title: 'Expenses',
-                          value: data.totalExpenses.toStringAsFixed(0),
-                          subtitle: 'Filtered expenses',
-                          icon: Icons.payments_rounded,
-                        ),
-                        _SummaryCard(
-                          title: 'Profit',
-                          value: data.totalProfit.toStringAsFixed(0),
-                          subtitle: 'Revenue - Expenses',
-                          icon: Icons.account_balance_wallet_rounded,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    const Text(
-                      'Center Performance',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    ...data.centers.map(
-                      (center) => _CenterPerformanceCard(center: center),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'All Records',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        Text(
-                          '${data.records.length} rows',
-                          style: const TextStyle(color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    if (data.records.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'No records found for this period.',
-                          style: TextStyle(color: Colors.black54),
-                        ),
-                      )
-                    else
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            columnSpacing: 22,
-                            headingTextStyle: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0F172A),
-                            ),
-                            columns: const [
-                              DataColumn(label: Text('Date')),
-                              DataColumn(label: Text('Center')),
-                              DataColumn(label: Text('Type')),
-                              DataColumn(label: Text('Item')),
-                              DataColumn(label: Text('Qty')),
-                              DataColumn(label: Text('Amount')),
-                              DataColumn(label: Text('Description')),
-                            ],
-                            rows: data.records.map((row) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(_formatDate(row.createdAt))),
-                                  DataCell(Text(row.centerName)),
-                                  DataCell(Text(row.type)),
-                                  DataCell(Text(row.itemName)),
-                                  DataCell(
-                                    Text(row.quantity?.toString() ?? '-'),
-                                  ),
-                                  DataCell(Text(row.amount.toStringAsFixed(0))),
-                                  DataCell(Text(row.description)),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ),
-                  ],
+    return RefreshIndicator(
+      onRefresh: () async {
+        await context.read<AdminReportsCubit>().loadReports();
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF00695C), Color(0xFF00897B)],
+              ),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'System Report',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
-              );
+                SizedBox(height: 8),
+                Text(
+                  'Monitor all centers, revenue, expenses, and profit performance.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          DropdownButtonFormField<AdminReportPeriod>(
+            value: data.selectedPeriod,
+            decoration: InputDecoration(
+              labelText: 'Period',
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: AdminReportPeriod.all,
+                child: Text('All Time'),
+              ),
+              DropdownMenuItem(
+                value: AdminReportPeriod.today,
+                child: Text('Today'),
+              ),
+              DropdownMenuItem(
+                value: AdminReportPeriod.week,
+                child: Text('This Week'),
+              ),
+              DropdownMenuItem(
+                value: AdminReportPeriod.month,
+                child: Text('This Month'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                context.read<AdminReportsCubit>().changePeriod(value);
+              }
             },
           ),
-        ),
+
+          const SizedBox(height: 20),
+
+          GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 1.05,
+            children: [
+              _SummaryCard(
+                title: 'Centers',
+                value: data.totalCenters.toString(),
+                subtitle: 'Active centers',
+                icon: Icons.wifi_rounded,
+              ),
+              _SummaryCard(
+                title: 'Revenue',
+                value: data.totalSales.toStringAsFixed(0),
+                subtitle: 'Filtered sales',
+                icon: Icons.trending_up_rounded,
+              ),
+              _SummaryCard(
+                title: 'Expenses',
+                value: data.totalExpenses.toStringAsFixed(0),
+                subtitle: 'Filtered expenses',
+                icon: Icons.payments_rounded,
+              ),
+              _SummaryCard(
+                title: 'Profit',
+                value: data.totalProfit.toStringAsFixed(0),
+                subtitle: 'Revenue - Expenses',
+                icon: Icons.account_balance_wallet_rounded,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          const Text(
+            'Center Performance',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          ...data.centers.map(
+            (center) => _CenterPerformanceCard(center: center),
+          ),
+
+          const SizedBox(height: 24),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'All Records',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              Text(
+                '${data.records.length} rows',
+                style: const TextStyle(color: Colors.black54),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          if (data.records.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'No records found for this period.',
+                style: TextStyle(color: Colors.black54),
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: 22,
+                  headingTextStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                  columns: const [
+                    DataColumn(label: Text('Date')),
+                    DataColumn(label: Text('Center')),
+                    DataColumn(label: Text('Type')),
+                    DataColumn(label: Text('Item')),
+                    DataColumn(label: Text('Qty')),
+                    DataColumn(label: Text('Amount')),
+                    DataColumn(label: Text('Description')),
+                  ],
+                  rows: data.records.map((row) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(_formatDate(row.createdAt))),
+                        DataCell(Text(row.centerName)),
+                        DataCell(Text(row.type)),
+                        DataCell(Text(row.itemName)),
+                        DataCell(Text(row.quantity?.toString() ?? '-')),
+                        DataCell(Text(row.amount.toStringAsFixed(0))),
+                        DataCell(Text(row.description)),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -343,7 +349,10 @@ class _SummaryCard extends StatelessWidget {
             subtitle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: Colors.black54),
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.black54,
+            ),
           ),
         ],
       ),
@@ -354,7 +363,9 @@ class _SummaryCard extends StatelessWidget {
 class _CenterPerformanceCard extends StatelessWidget {
   final AdminCenterReportItem center;
 
-  const _CenterPerformanceCard({required this.center});
+  const _CenterPerformanceCard({
+    required this.center,
+  });
 
   @override
   Widget build(BuildContext context) {
