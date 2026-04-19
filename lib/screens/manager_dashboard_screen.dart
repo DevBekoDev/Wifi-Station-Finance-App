@@ -4,14 +4,12 @@ import 'package:wsfm/cubits/manager_dashboard/manager_dashboard_cubit.dart';
 import 'package:wsfm/cubits/manager_dashboard/manager_dashboard_state.dart';
 import 'package:wsfm/screens/reports_screen.dart';
 import 'package:wsfm/screens/sales_screen.dart';
+import 'package:wsfm/screens/expenses_screen.dart';
 
 class ManagerDashboardScreen extends StatelessWidget {
   final String centerId;
 
-  const ManagerDashboardScreen({
-    super.key,
-    required this.centerId,
-  });
+  const ManagerDashboardScreen({super.key, required this.centerId});
 
   @override
   Widget build(BuildContext context) {
@@ -154,9 +152,8 @@ class ManagerDashboardScreen extends StatelessWidget {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => SalesScreen(
-                                    centerId: data.centerId,
-                                  ),
+                                  builder: (_) =>
+                                      SalesScreen(centerId: data.centerId),
                                 ),
                               );
                             },
@@ -172,9 +169,8 @@ class ManagerDashboardScreen extends StatelessWidget {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ReportsScreen(
-                                    centerId: data.centerId,
-                                  ),
+                                  builder: (_) =>
+                                      ReportsScreen(centerId: data.centerId),
                                 ),
                               );
                             },
@@ -193,9 +189,11 @@ class ManagerDashboardScreen extends StatelessWidget {
                             subtitle: "Track center expenses",
                             icon: Icons.receipt_long_rounded,
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Expenses screen next"),
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ExpensesScreen(centerId: data.centerId),
                                 ),
                               );
                             },
@@ -238,7 +236,7 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
@@ -277,10 +275,7 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
-            ),
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
         ],
       ),
@@ -340,10 +335,7 @@ class _ActionCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 subtitle,
-                style: const TextStyle(
-                  color: Colors.black54,
-                  fontSize: 13,
-                ),
+                style: const TextStyle(color: Colors.black54, fontSize: 13),
               ),
             ],
           ),

@@ -116,7 +116,7 @@ class _CreateCenterViewState extends State<_CreateCenterView> {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              "Add a new center and save it directly to Firestore.",
+                              "Add a new center , and start tracking your sales and expenses.",
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.white70,

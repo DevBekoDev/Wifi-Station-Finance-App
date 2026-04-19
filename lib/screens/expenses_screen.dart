@@ -1,60 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:wsfm/cubits/sales/sales_cubit.dart';
-import 'package:wsfm/cubits/sales/sales_state.dart';
+import 'package:wsfm/cubits/expenses/expenses_cubit.dart';
+import 'package:wsfm/cubits/expenses/expenses_state.dart';
 
-class SalesScreen extends StatelessWidget {
+class ExpensesScreen extends StatelessWidget {
   final String centerId;
 
-  const SalesScreen({super.key, required this.centerId});
+  const ExpensesScreen({
+    super.key,
+    required this.centerId,
+  });
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => SalesCubit()..loadSales(centerId),
-      child: _SalesView(centerId: centerId),
+      create: (_) => ExpensesCubit()..loadExpenses(centerId),
+      child: _ExpensesView(centerId: centerId),
     );
   }
 }
 
-class _SalesView extends StatelessWidget {
+class _ExpensesView extends StatelessWidget {
   final String centerId;
 
-  _SalesView({required this.centerId});
+  _ExpensesView({required this.centerId});
 
-  final List<_PackageOption> packages = const [
-    _PackageOption(name: '1 GB', price: 25, icon: Icons.wifi_rounded),
-    _PackageOption(name: '2 GB', price: 35, icon: Icons.data_usage_rounded),
-    _PackageOption(name: '5 GB', price: 60, icon: Icons.sd_storage_rounded),
-    _PackageOption(name: '10 GB', price: 100, icon: Icons.flash_on_rounded),
-    _PackageOption(
-      name: 'Unlimited',
-      price: 150,
-      icon: Icons.all_inclusive_rounded,
-    ),
-    _PackageOption(
-      name: 'Night Pack',
-      price: 40,
-      icon: Icons.nights_stay_rounded,
-    ),
+  final List<_ExpenseCategory> categories = const [
+    _ExpenseCategory(name: 'Internet', icon: Icons.language_rounded),
+    _ExpenseCategory(name: 'Electricity', icon: Icons.electric_bolt_rounded),
+    _ExpenseCategory(name: 'Rent', icon: Icons.home_work_rounded),
+    _ExpenseCategory(name: 'Maintenance', icon: Icons.build_rounded),
+    _ExpenseCategory(name: 'Salary', icon: Icons.payments_rounded),
+    _ExpenseCategory(name: 'Other Expenses', icon: Icons.more_horiz_rounded),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<SalesCubit, SalesState>(
+    return BlocConsumer<ExpensesCubit, ExpensesState>(
       listener: (context, state) {
         if (state.errorMessage != null) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.errorMessage!)));
-          context.read<SalesCubit>().clearMessages();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!)),
+          );
+          context.read<ExpensesCubit>().clearMessages();
         }
 
         if (state.successMessage != null) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.successMessage!)));
-          context.read<SalesCubit>().clearMessages();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.successMessage!)),
+          );
+          context.read<ExpensesCubit>().clearMessages();
         }
       },
       builder: (context, state) {
@@ -65,7 +60,7 @@ class _SalesView extends StatelessWidget {
             backgroundColor: Colors.transparent,
             foregroundColor: const Color(0xFF0F172A),
             title: const Text(
-              'Sales',
+              'Expenses',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -74,7 +69,7 @@ class _SalesView extends StatelessWidget {
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
                     onRefresh: () async {
-                      context.read<SalesCubit>().loadSales(centerId);
+                      context.read<ExpensesCubit>().loadExpenses(centerId);
                     },
                     child: ListView(
                       padding: const EdgeInsets.all(20),
@@ -93,7 +88,7 @@ class _SalesView extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Package Sales',
+                                'Center Expenses',
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
@@ -102,7 +97,7 @@ class _SalesView extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Tap a package, choose quantity, and save the sale for this center.',
+                                'Choose an expense category, enter amount and description, then save it.',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.white.withOpacity(0.85),
@@ -123,17 +118,17 @@ class _SalesView extends StatelessWidget {
                           physics: const NeverScrollableScrollPhysics(),
                           childAspectRatio: 1.25,
                           children: [
-                            _SummaryCard(
-                              title: 'Total Sales',
-                              value: state.totalSalesAmount.toStringAsFixed(0),
+                            _ExpenseSummaryCard(
+                              title: 'Total Expenses',
+                              value: state.totalExpensesAmount.toStringAsFixed(0),
                               subtitle: 'Saved amount',
-                              icon: Icons.trending_up_rounded,
+                              icon: Icons.payments_rounded,
                             ),
-                            _SummaryCard(
-                              title: 'Cards Sold',
-                              value: state.totalQuantity.toString(),
-                              subtitle: 'Total quantity',
-                              icon: Icons.confirmation_number_rounded,
+                            _ExpenseSummaryCard(
+                              title: 'Records',
+                              value: state.totalExpensesCount.toString(),
+                              subtitle: 'Expense entries',
+                              icon: Icons.receipt_long_rounded,
                             ),
                           ],
                         ),
@@ -141,7 +136,7 @@ class _SalesView extends StatelessWidget {
                         const SizedBox(height: 22),
 
                         const Text(
-                          'Choose Package',
+                          'Choose Category',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -151,22 +146,22 @@ class _SalesView extends StatelessWidget {
                         const SizedBox(height: 12),
 
                         GridView.builder(
-                          itemCount: packages.length,
+                          itemCount: categories.length,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 14,
-                                mainAxisSpacing: 14,
-                                childAspectRatio: 1.05,
-                              ),
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 14,
+                            childAspectRatio: 1.05,
+                          ),
                           itemBuilder: (context, index) {
-                            final item = packages[index];
-                            return _PackageCard(
+                            final item = categories[index];
+                            return _ExpenseCategoryCard(
                               item: item,
                               onTap: () {
-                                _showQuantitySheet(
+                                _showExpenseSheet(
                                   context: context,
                                   item: item,
                                 );
@@ -178,7 +173,7 @@ class _SalesView extends StatelessWidget {
                         const SizedBox(height: 22),
 
                         const Text(
-                          'Recent Sales',
+                          'Recent Expenses',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -187,7 +182,7 @@ class _SalesView extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
 
-                        if (state.recentSales.isEmpty)
+                        if (state.recentExpenses.isEmpty)
                           Container(
                             padding: const EdgeInsets.all(18),
                             decoration: BoxDecoration(
@@ -195,13 +190,13 @@ class _SalesView extends StatelessWidget {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Text(
-                              'No sales saved yet.',
+                              'No expenses saved yet.',
                               style: TextStyle(color: Colors.black54),
                             ),
                           )
                         else
-                          ...state.recentSales.map(
-                            (sale) => _SaleHistoryCard(sale: sale),
+                          ...state.recentExpenses.map(
+                            (expense) => _ExpenseHistoryCard(expense: expense),
                           ),
 
                         if (state.isSaving)
@@ -218,30 +213,33 @@ class _SalesView extends StatelessWidget {
     );
   }
 
-  void _showQuantitySheet({
+  void _showExpenseSheet({
     required BuildContext context,
-    required _PackageOption item,
+    required _ExpenseCategory item,
   }) {
-    final salesCubit = context.read<SalesCubit>();
-    int quantity = 1;
+    final amountController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final total = item.price * quantity;
-
-            return Container(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 26),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF5F7FB),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-              ),
-              child: SafeArea(
-                top: false,
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 26),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF5F7FB),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Form(
+                key: formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,99 +264,90 @@ class _SalesView extends StatelessWidget {
                         color: Color(0xFF0F172A),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Price: ${item.price.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: Colors.black54,
-                      ),
-                    ),
 
                     const SizedBox(height: 22),
 
                     const Text(
-                      'Quantity',
+                      'Amount',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF0F172A),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
-                    Row(
-                      children: [
-                        _QtyButton(
-                          icon: Icons.remove,
-                          onTap: () {
-                            if (quantity > 1) {
-                              setModalState(() {
-                                quantity--;
-                              });
-                            }
-                          },
+                    TextFormField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Amount is required.';
+                        }
+
+                        final amount = double.tryParse(value.trim());
+                        if (amount == null || amount <= 0) {
+                          return 'Enter a valid amount.';
+                        }
+
+                        return null;
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Enter amount',
+                        prefixIcon: const Icon(
+                          Icons.payments_outlined,
+                          color: Color(0xFF00695C),
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Center(
-                              child: Text(
-                                quantity.toString(),
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                            ),
-                          ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide.none,
                         ),
-                        const SizedBox(width: 14),
-                        _QtyButton(
-                          icon: Icons.add,
-                          onTap: () {
-                            setModalState(() {
-                              quantity++;
-                            });
-                          },
-                        ),
-                      ],
+                      ),
                     ),
 
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 18),
 
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
+                    const Text(
+                      'Description',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Total',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.black54,
-                            ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    TextFormField(
+                      controller: descriptionController,
+                      maxLines: 3,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Description is required.';
+                        }
+                        if (value.trim().length < 3) {
+                          return 'Description must be at least 3 characters.';
+                        }
+                        return null;
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Write expense description',
+                        prefixIcon: const Padding(
+                          padding: EdgeInsets.only(bottom: 50),
+                          child: Icon(
+                            Icons.notes_rounded,
+                            color: Color(0xFF00695C),
                           ),
-                          Text(
-                            total.toStringAsFixed(0),
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF00695C),
-                            ),
-                          ),
-                        ],
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
 
@@ -368,14 +357,19 @@ class _SalesView extends StatelessWidget {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () {
+                          if (!formKey.currentState!.validate()) return;
+
+                          final amount =
+                              double.tryParse(amountController.text.trim()) ?? 0;
+
                           Navigator.pop(sheetContext);
 
-                          salesCubit.addSale(
-                            centerId: centerId,
-                            packageName: item.name,
-                            packagePrice: item.price,
-                            quantity: quantity,
-                          );
+                          context.read<ExpensesCubit>().addExpense(
+                                centerId: centerId,
+                                category: item.name,
+                                amount: amount,
+                                description: descriptionController.text.trim(),
+                              );
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF00695C),
@@ -385,7 +379,7 @@ class _SalesView extends StatelessWidget {
                           ),
                         ),
                         child: const Text(
-                          'Confirm Sale',
+                          'Confirm Expense',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -397,31 +391,32 @@ class _SalesView extends StatelessWidget {
                   ],
                 ),
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
   }
 }
 
-class _PackageOption {
+class _ExpenseCategory {
   final String name;
-  final double price;
   final IconData icon;
 
-  const _PackageOption({
+  const _ExpenseCategory({
     required this.name,
-    required this.price,
     required this.icon,
   });
 }
 
-class _PackageCard extends StatelessWidget {
-  final _PackageOption item;
+class _ExpenseCategoryCard extends StatelessWidget {
+  final _ExpenseCategory item;
   final VoidCallback onTap;
 
-  const _PackageCard({required this.item, required this.onTap});
+  const _ExpenseCategoryCard({
+    required this.item,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -432,7 +427,7 @@ class _PackageCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(25),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
             boxShadow: const [
@@ -454,15 +449,10 @@ class _PackageCard extends StatelessWidget {
               Text(
                 item.name,
                 style: const TextStyle(
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF0F172A),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Price: ${item.price.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 13, color: Colors.black54),
               ),
             ],
           ),
@@ -472,13 +462,13 @@ class _PackageCard extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
+class _ExpenseSummaryCard extends StatelessWidget {
   final String title;
   final String value;
   final String subtitle;
   final IconData icon;
 
-  const _SummaryCard({
+  const _ExpenseSummaryCard({
     required this.title,
     required this.value,
     required this.subtitle,
@@ -527,7 +517,10 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+            ),
           ),
         ],
       ),
@@ -535,10 +528,12 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _SaleHistoryCard extends StatelessWidget {
-  final SaleHistoryItem sale;
+class _ExpenseHistoryCard extends StatelessWidget {
+  final ExpenseHistoryItem expense;
 
-  const _SaleHistoryCard({required this.sale});
+  const _ExpenseHistoryCard({
+    required this.expense,
+  });
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/'
@@ -561,7 +556,10 @@ class _SaleHistoryCard extends StatelessWidget {
         children: [
           const CircleAvatar(
             backgroundColor: Color(0xFFE0F2F1),
-            child: Icon(Icons.receipt_long_rounded, color: Color(0xFF00695C)),
+            child: Icon(
+              Icons.receipt_long_rounded,
+              color: Color(0xFF00695C),
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -569,7 +567,7 @@ class _SaleHistoryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  sale.packageName,
+                  expense.category,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -578,19 +576,25 @@ class _SaleHistoryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Quantity: ${sale.quantity} × ${sale.packagePrice.toStringAsFixed(0)}',
-                  style: const TextStyle(color: Colors.black54, fontSize: 13),
+                  expense.description,
+                  style: const TextStyle(
+                    color: Colors.black54,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _formatDate(sale.createdAt),
-                  style: const TextStyle(color: Colors.black45, fontSize: 12),
+                  _formatDate(expense.createdAt),
+                  style: const TextStyle(
+                    color: Colors.black45,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
           ),
           Text(
-            sale.totalAmount.toStringAsFixed(0),
+            expense.amount.toStringAsFixed(0),
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
@@ -598,30 +602,6 @@ class _SaleHistoryCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _QtyButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _QtyButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFF00695C),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: SizedBox(
-          width: 52,
-          height: 52,
-          child: Icon(icon, color: Colors.white),
-        ),
       ),
     );
   }
