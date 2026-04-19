@@ -4,6 +4,7 @@ import 'package:wsfm/cubits/admin_dashboard/admin_dashboard_cubit.dart';
 import 'package:wsfm/cubits/admin_dashboard/admin_dashboard_state.dart';
 import 'package:wsfm/screens/create_center_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:wsfm/screens/admin_reports_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
@@ -47,7 +48,7 @@ class AdminDashboardScreen extends StatelessWidget {
                       mainAxisSpacing: 14,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 1.5,
+                      childAspectRatio: 1.08,
                       children: [
                         _SummaryCard(
                           title: 'Total Centers',
@@ -72,6 +73,62 @@ class AdminDashboardScreen extends StatelessWidget {
                           value: '\$${data.monthlyExpenses.toStringAsFixed(0)}',
                           subtitle: 'This month',
                           icon: Icons.payments_rounded,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+
+                    _SectionTitle(
+                      title: 'Monthly Reports',
+                      actionText: 'Open reports',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AdminReportsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    const _MonthlyReportCard(),
+
+                    const SizedBox(height: 22),
+
+                    _SectionTitle(
+                      title: 'Quick Actions',
+                      actionText: '',
+                      onTap: null,
+                    ),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CreateCenterScreen(),
+                                ),
+                              );
+                            },
+                            child: const _QuickActionCard(
+                              title: 'Create Center',
+                              subtitle: 'Add a new WiFi station',
+                              icon: Icons.add_business_rounded,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: _QuickActionCard(
+                            title: 'placeholder',
+                            subtitle: 'new feature coming soon',
+                            icon: Icons.build_rounded,
+                          ),
                         ),
                       ],
                     ),
@@ -134,71 +191,20 @@ class AdminDashboardScreen extends StatelessWidget {
                       },
                     ),
 
-                    const SizedBox(height: 22),
+                    // _SectionTitle(
+                    //   title: 'Active Centers',
+                    //   actionText: 'Manage',
+                    //   onTap: () {},
+                    // ),
+                    // const SizedBox(height: 12),
 
-                    _SectionTitle(
-                      title: 'Monthly Reports',
-                      actionText: 'Open reports',
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 12),
-
-                    const _MonthlyReportCard(),
-
-                    const SizedBox(height: 22),
-
-                    _SectionTitle(
-                      title: 'Quick Actions',
-                      actionText: '',
-                      onTap: null,
-                    ),
-                    const SizedBox(height: 12),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const CreateCenterScreen(),
-                                ),
-                              );
-                            },
-                            child: const _QuickActionCard(
-                              title: 'Create Center',
-                              subtitle: 'Add a new WiFi station',
-                              icon: Icons.add_business_rounded,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: _QuickActionCard(
-                            title: 'Add Manager',
-                            subtitle: 'Generate manager account',
-                            icon: Icons.person_add_alt_1_rounded,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-
-                    _SectionTitle(
-                      title: 'Active Centers',
-                      actionText: 'Manage',
-                      onTap: () {},
-                    ),
-                    const SizedBox(height: 12),
-
-                    ...data.centers.map(
-                      (center) => _CenterTile(
-                        name: center['name'],
-                        location: center['location'],
-                        manager: center['manager'],
-                      ),
-                    ),
+                    // // ...data.centers.map(
+                    // //   (center) => _CenterTile(
+                    // //     name: center['name'],
+                    // //     location: center['location'],
+                    // //     manager: center['manager'],
+                    // //   ),
+                    // // ),
                   ],
                 ),
               );
@@ -458,7 +464,12 @@ class _MonthlyReportCard extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           ElevatedButton(
-            onPressed: null,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
+              );
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: Color(0xFF00695C),
