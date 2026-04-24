@@ -4,7 +4,7 @@ import 'package:wsfm/cubits/admin_reports/admin_reports_state.dart';
 
 class AdminReportExportService {
   Future<File> exportAdminReportCsv({
-    required List<AdminRecordRow> rows,
+    required List<AdminReportRow> rows,
   }) async {
     final buffer = StringBuffer();
     buffer.writeln('Date,Center,Type,Item,Quantity,Amount,Description');

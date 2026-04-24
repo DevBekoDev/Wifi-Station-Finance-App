@@ -37,20 +37,23 @@ class AdminReportsCubit extends Cubit<AdminReportsState> {
       final Map<String, double> expensesByCenter = {};
       final Map<String, int> salesCountByCenter = {};
       final Map<String, int> expenseCountByCenter = {};
-      final List<AdminRecordRow> allRecords = [];
+      final List<AdminReportRow> allRecords = [];
+
+      int totalCardsSold = 0;
 
       for (final doc in filteredSales) {
         final data = doc.data();
         final centerId = data['centerId'] ?? '';
         final amount = _toDouble(data['totalAmount']);
-        final quantity = _toInt(data['quantity']);
+        final quantity = _toInt(data['quantity'] ?? data['cardsSold']);
         final date = _extractDate(data['createdAt'], data['date']);
 
         salesByCenter[centerId] = (salesByCenter[centerId] ?? 0) + amount;
         salesCountByCenter[centerId] = (salesCountByCenter[centerId] ?? 0) + 1;
+        totalCardsSold += quantity;
 
         allRecords.add(
-          AdminRecordRow(
+          AdminReportRow(
             id: doc.id,
             centerId: centerId,
             centerName: '',
@@ -70,13 +73,12 @@ class AdminReportsCubit extends Cubit<AdminReportsState> {
         final amount = _toDouble(data['amount']);
         final date = _extractDate(data['createdAt'], data['date']);
 
-        expensesByCenter[centerId] =
-            (expensesByCenter[centerId] ?? 0) + amount;
+        expensesByCenter[centerId] = (expensesByCenter[centerId] ?? 0) + amount;
         expenseCountByCenter[centerId] =
             (expenseCountByCenter[centerId] ?? 0) + 1;
 
         allRecords.add(
-          AdminRecordRow(
+          AdminReportRow(
             id: doc.id,
             centerId: centerId,
             centerName: '',
@@ -129,7 +131,7 @@ class AdminReportsCubit extends Cubit<AdminReportsState> {
 
       final recordsWithNames = allRecords
           .map(
-            (row) => AdminRecordRow(
+            (row) => AdminReportRow(
               id: row.id,
               centerId: row.centerId,
               centerName: centerNames[row.centerId] ?? 'Unknown Center',
@@ -153,6 +155,7 @@ class AdminReportsCubit extends Cubit<AdminReportsState> {
           totalExpenses: totalExpenses,
           totalProfit: totalSales - totalExpenses,
           totalCenters: centerReports.length,
+          totalCardsSold: totalCardsSold,
           centers: centerReports,
           records: recordsWithNames,
         ),
@@ -178,10 +181,8 @@ class AdminReportsCubit extends Cubit<AdminReportsState> {
             date.month == now.month &&
             date.day == now.day;
       case AdminReportPeriod.week:
-        final startOfWeek =
-            DateTime(now.year, now.month, now.day).subtract(
-          Duration(days: now.weekday - 1),
-        );
+        final startOfWeek = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1));
         return !date.isBefore(startOfWeek);
       case AdminReportPeriod.month:
         return date.year == now.year && date.month == now.month;

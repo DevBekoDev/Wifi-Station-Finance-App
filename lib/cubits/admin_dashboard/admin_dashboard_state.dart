@@ -9,6 +9,8 @@ class AdminDashboardLoaded extends AdminDashboardState {
   final int totalManagers;
   final double monthlyRevenue;
   final double monthlyExpenses;
+  final double totalSales;
+  final int totalCardsSold;
   final List<Map<String, dynamic>> leaderboard;
   final List<Map<String, dynamic>> centers;
 
@@ -17,6 +19,8 @@ class AdminDashboardLoaded extends AdminDashboardState {
     required this.totalManagers,
     required this.monthlyRevenue,
     required this.monthlyExpenses,
+    required this.totalSales,
+    required this.totalCardsSold,
     required this.leaderboard,
     required this.centers,
   });
