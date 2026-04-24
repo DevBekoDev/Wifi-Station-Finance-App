@@ -24,7 +24,7 @@ class AdminCenterReportItem {
   });
 }
 
-class AdminRecordRow {
+class AdminReportRow {
   final String id;
   final String centerId;
   final String centerName;
@@ -35,7 +35,7 @@ class AdminRecordRow {
   final double amount;
   final String description;
 
-  const AdminRecordRow({
+  const AdminReportRow({
     required this.id,
     required this.centerId,
     required this.centerName,
@@ -60,8 +60,9 @@ class AdminReportsLoaded extends AdminReportsState {
   final double totalExpenses;
   final double totalProfit;
   final int totalCenters;
+  final int totalCardsSold;
   final List<AdminCenterReportItem> centers;
-  final List<AdminRecordRow> records;
+  final List<AdminReportRow> records;
 
   AdminReportsLoaded({
     required this.selectedPeriod,
@@ -69,6 +70,7 @@ class AdminReportsLoaded extends AdminReportsState {
     required this.totalExpenses,
     required this.totalProfit,
     required this.totalCenters,
+    required this.totalCardsSold,
     required this.centers,
     required this.records,
   });
