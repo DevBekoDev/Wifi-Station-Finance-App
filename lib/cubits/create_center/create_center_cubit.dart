@@ -6,7 +6,7 @@ class CreateCenterCubit extends Cubit<CreateCenterState> {
   CreateCenterCubit() : super(CreateCenterInitial());
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
+  
   final RegExp _emailRegex = RegExp(
     r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,4}$',
   );
