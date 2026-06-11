@@ -5,6 +5,7 @@ import 'package:wsfm/cubits/admin_dashboard/admin_dashboard_state.dart';
 import 'package:wsfm/services/admin_report_export_serviVe.dart';
 import 'package:wsfm/screens/create_center_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:wsfm/screens/admin_center_edit.dart';
 import 'package:wsfm/screens/admin_reports_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
@@ -279,6 +280,7 @@ class _AdminDashboardView extends StatelessWidget {
                                           manager:
                                               data['managerName'] ??
                                               'No Manager',
+                                          centerId: doc.id,
                                         ),
                                       );
                                     }),
@@ -1014,11 +1016,13 @@ class _CenterTile extends StatelessWidget {
   final String name;
   final String location;
   final String manager;
+  final String centerId;
 
   const _CenterTile({
     required this.name,
     required this.location,
     required this.manager,
+    required this.centerId,
   });
 
   @override
@@ -1028,7 +1032,14 @@ class _CenterTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () {},
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminCenterEditScreen(centerId: centerId),
+            ),
+          );
+        },
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(

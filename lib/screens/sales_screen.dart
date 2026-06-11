@@ -5,11 +5,43 @@ import 'package:wsfm/cubits/sales/sales_cubit.dart';
 import 'package:wsfm/cubits/sales/sales_state.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sales Screen - Full Fixed Version
-// Drop-in replacement for sales_screen.dart.
-// Fixes Dismissible delete crash by NEVER returning true from confirmDismiss.
-// Firestore stream removes deleted items naturally after delete succeeds.
+// Sales Screen — Updated
+//
+// New features:
+//   1. Confirm-sale sheet → sale type (Normal / Debt / Gift) + optional comment.
+//   2. Delete dialog → two reasons:
+//        • Returned  → increase stock  (card came back)
+//        • Corrupted → decrease stock  (card is lost/damaged)
+//
+// Cubit methods expected:
+//   addSale({ centerId, packageName, packagePrice, quantity,
+//              saleType, comment })
+//   deleteSale({ centerId, saleId, reason })   // reason: DeleteReason
+//   editSale({ centerId, saleId, quantity })
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Public Enums (used by cubit / Firestore layer) ─────────────────────────
+
+/// Why a sale record is being removed.
+enum DeleteReason {
+  /// Customer returned the card → add back to stock.
+  returned,
+
+  /// Card was corrupted / defective → subtract from stock.
+  corrupted,
+}
+
+/// The nature of the sale transaction.
+enum SaleType {
+  /// Regular paid sale.
+  normal,
+
+  /// Customer will pay later (debt / credit).
+  debt,
+
+  /// Complimentary / gifted — no payment expected.
+  gift,
+}
 
 // ─── Theme Constants ─────────────────────────────────────────────────────────
 
@@ -31,6 +63,8 @@ const _kDanger = Color(0xFFE53935);
 const _kWarning = Color(0xFFFFA726);
 const _kSuccess = Color(0xFF12B76A);
 const _kEdit = Color(0xFF1976D2);
+const _kDebt = Color(0xFFE65100);
+const _kGift = Color(0xFF7B1FA2);
 
 const _kShadow = Color(0x12000000);
 
@@ -105,9 +139,7 @@ class SalesScreen extends StatelessWidget {
 class _SalesView extends StatefulWidget {
   final String centerId;
 
-  const _SalesView({
-    required this.centerId,
-  });
+  const _SalesView({required this.centerId});
 
   @override
   State<_SalesView> createState() => _SalesViewState();
@@ -155,13 +187,7 @@ class _SalesViewState extends State<_SalesView> {
     if (state.errorMessage != null) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          _buildSnackBar(
-            state.errorMessage!,
-            isError: true,
-          ),
-        );
-
+        ..showSnackBar(_buildSnackBar(state.errorMessage!, isError: true));
       context.read<SalesCubit>().clearMessages();
     }
 
@@ -169,7 +195,6 @@ class _SalesViewState extends State<_SalesView> {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(_buildSnackBar(state.successMessage!));
-
       context.read<SalesCubit>().clearMessages();
     }
   }
@@ -229,12 +254,7 @@ class _SalesViewState extends State<_SalesView> {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(
-          _kPagePadding,
-          8,
-          _kPagePadding,
-          32,
-        ),
+        padding: const EdgeInsets.fromLTRB(_kPagePadding, 8, _kPagePadding, 32),
         children: [
           _HeroCard(
             totalAmount: state.totalSalesAmount,
@@ -266,7 +286,7 @@ class _SalesViewState extends State<_SalesView> {
           const SizedBox(height: 22),
           _SectionHeader(
             title: 'Choose Package',
-            subtitle: 'Tap a card, choose quantity, then confirm.',
+            subtitle: 'Tap a card, choose quantity & type, then confirm.',
             trailing: state.isSaving
                 ? const _MiniStatusPill(
                     text: 'Saving...',
@@ -284,10 +304,7 @@ class _SalesViewState extends State<_SalesView> {
                 packages: _kPackages,
                 onSelect: (item) {
                   HapticFeedback.lightImpact();
-                  _showQuantitySheet(
-                    context: context,
-                    item: item,
-                  );
+                  _showQuantitySheet(context: context, item: item);
                 },
               ),
             ),
@@ -304,9 +321,7 @@ class _SalesViewState extends State<_SalesView> {
             controller: _searchController,
             query: _searchQuery,
             sort: _sort,
-            onQueryChanged: (value) {
-              setState(() => _searchQuery = value.trim());
-            },
+            onQueryChanged: (value) => setState(() => _searchQuery = value.trim()),
             onClear: () {
               _searchController.clear();
               setState(() => _searchQuery = '');
@@ -322,11 +337,8 @@ class _SalesViewState extends State<_SalesView> {
             allSalesCount: state.recentSales.length,
             isSaving: state.isSaving,
             hasActiveFilter: _searchQuery.isNotEmpty,
-            onDelete: (sale) => _deleteSale(context, sale),
-            onEdit: (sale) => _showEditSaleSheet(
-              context: context,
-              sale: sale,
-            ),
+            onDelete: (sale, reason) => _deleteSale(context, sale, reason),
+            onEdit: (sale) => _showEditSaleSheet(context: context, sale: sale),
             onClearFilter: () {
               _searchController.clear();
               setState(() => _searchQuery = '');
@@ -347,11 +359,9 @@ class _SalesViewState extends State<_SalesView> {
 
     final filtered = sales.where((sale) {
       if (query.isEmpty) return true;
-
       final packageName = sale.packageName.toLowerCase();
       final quantity = sale.quantity.toString();
       final amount = sale.totalAmount.toStringAsFixed(0);
-
       return packageName.contains(query) ||
           quantity.contains(query) ||
           amount.contains(query);
@@ -373,16 +383,12 @@ class _SalesViewState extends State<_SalesView> {
 
   String? _bestPackageName(List<SaleHistoryItem> sales) {
     if (sales.isEmpty) return null;
-
     final totals = <String, int>{};
-
     for (final sale in sales) {
       totals[sale.packageName] = (totals[sale.packageName] ?? 0) + sale.quantity;
     }
-
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-
     return entries.first.key;
   }
 
@@ -391,19 +397,16 @@ class _SalesViewState extends State<_SalesView> {
     required _PackageOption item,
   }) {
     final salesCubit = context.read<SalesCubit>();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) {
-        return _QuantitySheet(
-          item: item,
-          centerId: widget.centerId,
-          salesCubit: salesCubit,
-        );
-      },
+      builder: (_) => _QuantitySheet(
+        item: item,
+        centerId: widget.centerId,
+        salesCubit: salesCubit,
+      ),
     );
   }
 
@@ -412,29 +415,31 @@ class _SalesViewState extends State<_SalesView> {
     required SaleHistoryItem sale,
   }) {
     final salesCubit = context.read<SalesCubit>();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      builder: (_) {
-        return _EditSaleSheet(
-          sale: sale,
-          centerId: widget.centerId,
-          salesCubit: salesCubit,
-        );
-      },
+      builder: (_) => _EditSaleSheet(
+        sale: sale,
+        centerId: widget.centerId,
+        salesCubit: salesCubit,
+      ),
     );
   }
 
-  void _deleteSale(BuildContext context, SaleHistoryItem sale) {
+  // ── Updated delete: receives reason from the dialog inside _SaleHistoryCard ──
+  void _deleteSale(
+    BuildContext context,
+    SaleHistoryItem sale,
+    DeleteReason reason,
+  ) {
     if (sale.id.trim().isEmpty) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           _buildSnackBar(
-            'Cannot delete this sale because sale ID is empty.',
+            'Cannot delete this sale because the sale ID is empty.',
             isError: true,
           ),
         );
@@ -443,9 +448,11 @@ class _SalesViewState extends State<_SalesView> {
 
     HapticFeedback.mediumImpact();
 
+    // Pass reason to your cubit so it can adjust stock accordingly.
     context.read<SalesCubit>().deleteSale(
           centerId: widget.centerId,
           saleId: sale.id,
+          reason: reason, // DeleteReason.returned → +stock | .corrupted → -stock
         );
   }
 }
@@ -474,11 +481,7 @@ class _HeroCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(30),
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF004D43),
-            Color(0xFF00796B),
-            Color(0xFF00A7B7),
-          ],
+          colors: [Color(0xFF004D43), Color(0xFF00796B), Color(0xFF00A7B7)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -611,10 +614,7 @@ class _HeroCircle extends StatelessWidget {
   final double size;
   final double opacity;
 
-  const _HeroCircle({
-    required this.size,
-    required this.opacity,
-  });
+  const _HeroCircle({required this.size, required this.opacity});
 
   @override
   Widget build(BuildContext context) {
@@ -640,15 +640,9 @@ class _HeroIcon extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.18),
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
-      child: const Icon(
-        Icons.storefront_rounded,
-        color: Colors.white,
-        size: 25,
-      ),
+      child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 25),
     );
   }
 }
@@ -676,11 +670,7 @@ class _HeroStat extends StatelessWidget {
               ? MainAxisAlignment.end
               : MainAxisAlignment.start,
           children: [
-            Icon(
-              icon,
-              color: Colors.white.withOpacity(0.82),
-              size: 16,
-            ),
+            Icon(icon, color: Colors.white.withOpacity(0.82), size: 16),
             const SizedBox(width: 5),
             Flexible(
               child: Text(
@@ -723,23 +713,16 @@ class _HeroStat extends StatelessWidget {
 class _WhitePill extends StatelessWidget {
   final String text;
 
-  const _WhitePill({
-    required this.text,
-  });
+  const _WhitePill({required this.text});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.16),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.18),
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.18)),
       ),
       child: Text(
         text,
@@ -757,10 +740,7 @@ class _GlassMiniChip extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _GlassMiniChip({
-    required this.icon,
-    required this.text,
-  });
+  const _GlassMiniChip({required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -790,14 +770,12 @@ class _GlassMiniChip extends StatelessWidget {
   }
 }
 
-// ─── Quick Insights ─────────────────────────────────────────────────────────
+// ─── Quick Insights ──────────────────────────────────────────────────────────
 
 class _QuickInsightsRow extends StatelessWidget {
   final List<_InsightData> cards;
 
-  const _QuickInsightsRow({
-    required this.cards,
-  });
+  const _QuickInsightsRow({required this.cards});
 
   @override
   Widget build(BuildContext context) {
@@ -813,7 +791,6 @@ class _QuickInsightsRow extends StatelessWidget {
             ],
           );
         }
-
         return Row(
           children: [
             for (int i = 0; i < cards.length; i++) ...[
@@ -830,9 +807,7 @@ class _QuickInsightsRow extends StatelessWidget {
 class _InsightCard extends StatelessWidget {
   final _InsightData data;
 
-  const _InsightCard({
-    required this.data,
-  });
+  const _InsightCard({required this.data});
 
   @override
   Widget build(BuildContext context) {
@@ -843,11 +818,7 @@ class _InsightCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _kBorder),
         boxShadow: const [
-          BoxShadow(
-            color: _kShadow,
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
+          BoxShadow(color: _kShadow, blurRadius: 12, offset: Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -949,29 +920,19 @@ class _MiniStatusPill extends StatelessWidget {
   final String text;
   final IconData icon;
 
-  const _MiniStatusPill({
-    required this.text,
-    required this.icon,
-  });
+  const _MiniStatusPill({required this.text, required this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: _kPrimarySoft,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: _kPrimaryDark,
-          ),
+          Icon(icon, size: 14, color: _kPrimaryDark),
           const SizedBox(width: 5),
           Text(
             text,
@@ -993,23 +954,18 @@ class _PackageGrid extends StatelessWidget {
   final List<_PackageOption> packages;
   final ValueChanged<_PackageOption> onSelect;
 
-  const _PackageGrid({
-    required this.packages,
-    required this.onSelect,
-  });
+  const _PackageGrid({required this.packages, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-
         final crossAxisCount = width >= 900
             ? 4
             : width >= 620
                 ? 3
                 : 2;
-
         final aspectRatio = width >= 900
             ? 1.38
             : width >= 620
@@ -1030,7 +986,6 @@ class _PackageGrid extends StatelessWidget {
           ),
           itemBuilder: (context, index) {
             final item = packages[index];
-
             return _PackageCard(
               item: item,
               onTap: () => onSelect(item),
@@ -1046,10 +1001,7 @@ class _PackageCard extends StatelessWidget {
   final _PackageOption item;
   final VoidCallback onTap;
 
-  const _PackageCard({
-    required this.item,
-    required this.onTap,
-  });
+  const _PackageCard({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1089,10 +1041,7 @@ class _PackageCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _SoftIconBox(
-                      icon: item.icon,
-                      size: 44,
-                    ),
+                    _SoftIconBox(icon: item.icon, size: 44),
                     const Spacer(),
                     _PackageBadge(text: item.badge),
                   ],
@@ -1143,11 +1092,7 @@ class _PackageCard extends StatelessWidget {
                       ),
                     ),
                     Spacer(),
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 16,
-                      color: _kTextMuted,
-                    ),
+                    Icon(Icons.arrow_forward_rounded, size: 16, color: _kTextMuted),
                   ],
                 ),
               ],
@@ -1162,9 +1107,7 @@ class _PackageCard extends StatelessWidget {
 class _PackageBadge extends StatelessWidget {
   final String text;
 
-  const _PackageBadge({
-    required this.text,
-  });
+  const _PackageBadge({required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -1172,10 +1115,7 @@ class _PackageBadge extends StatelessWidget {
         text.toLowerCase() == 'best';
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: isPopular ? _kWarning.withOpacity(0.16) : _kPrimarySoft,
         borderRadius: BorderRadius.circular(999),
@@ -1196,10 +1136,7 @@ class _SoftIconBox extends StatelessWidget {
   final IconData icon;
   final double size;
 
-  const _SoftIconBox({
-    required this.icon,
-    this.size = 42,
-  });
+  const _SoftIconBox({required this.icon, this.size = 42});
 
   @override
   Widget build(BuildContext context) {
@@ -1211,11 +1148,7 @@ class _SoftIconBox extends StatelessWidget {
         color: _kPrimarySoft,
         borderRadius: BorderRadius.circular(size * 0.34),
       ),
-      child: Icon(
-        icon,
-        color: _kPrimaryDark,
-        size: size * 0.5,
-      ),
+      child: Icon(icon, color: _kPrimaryDark, size: size * 0.5),
     );
   }
 }
@@ -1334,7 +1267,9 @@ class _SortChip extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
-                color: selected ? _kPrimaryLight.withOpacity(0.35) : _kBorder,
+                color: selected
+                    ? _kPrimaryLight.withOpacity(0.35)
+                    : _kBorder,
               ),
             ),
             child: Row(
@@ -1374,7 +1309,9 @@ class _SalesList extends StatelessWidget {
   final int allSalesCount;
   final bool isSaving;
   final bool hasActiveFilter;
-  final ValueChanged<SaleHistoryItem> onDelete;
+
+  /// Called with the sale AND the reason chosen in the dialog.
+  final void Function(SaleHistoryItem, DeleteReason) onDelete;
   final ValueChanged<SaleHistoryItem> onEdit;
   final VoidCallback onClearFilter;
 
@@ -1384,20 +1321,16 @@ class _SalesList extends StatelessWidget {
     required this.isSaving,
     required this.hasActiveFilter,
     required this.onDelete,
-    required this.onClearFilter,
     required this.onEdit,
+    required this.onClearFilter,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (allSalesCount == 0) {
-      return const _EmptySalesState();
-    }
-
+    if (allSalesCount == 0) return const _EmptySalesState();
     if (sales.isEmpty && hasActiveFilter) {
       return _NoSearchResultsState(onClear: onClearFilter);
     }
-
     return Column(
       children: [
         for (final sale in sales)
@@ -1419,10 +1352,7 @@ class _EmptySalesState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        vertical: 36,
-        horizontal: 22,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 22),
       decoration: BoxDecoration(
         color: _kSurface,
         borderRadius: BorderRadius.circular(_kCardRadius),
@@ -1472,9 +1402,7 @@ class _EmptySalesState extends StatelessWidget {
 class _NoSearchResultsState extends StatelessWidget {
   final VoidCallback onClear;
 
-  const _NoSearchResultsState({
-    required this.onClear,
-  });
+  const _NoSearchResultsState({required this.onClear});
 
   @override
   Widget build(BuildContext context) {
@@ -1488,11 +1416,7 @@ class _NoSearchResultsState extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.search_off_rounded,
-            color: _kTextMuted,
-            size: 42,
-          ),
+          const Icon(Icons.search_off_rounded, color: _kTextMuted, size: 42),
           const SizedBox(height: 10),
           const Text(
             'No matching sales',
@@ -1524,10 +1448,12 @@ class _NoSearchResultsState extends StatelessWidget {
   }
 }
 
+// ─── Sale History Card ───────────────────────────────────────────────────────
+
 class _SaleHistoryCard extends StatelessWidget {
   final SaleHistoryItem sale;
   final bool isSaving;
-  final ValueChanged<SaleHistoryItem> onDelete;
+  final void Function(SaleHistoryItem, DeleteReason) onDelete;
   final ValueChanged<SaleHistoryItem> onEdit;
 
   const _SaleHistoryCard({
@@ -1537,54 +1463,93 @@ class _SaleHistoryCard extends StatelessWidget {
     required this.onEdit,
   });
 
-  Future<bool> _confirmDelete(BuildContext context) async {
+  // ── NEW: returns the chosen reason, or null if cancelled ─────────────────
+  Future<DeleteReason?> _askDeleteReason(BuildContext context) async {
     HapticFeedback.mediumImpact();
 
-    final result = await showDialog<bool>(
+    return showDialog<DeleteReason>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text(
-            'Delete sale?',
-            style: TextStyle(fontWeight: FontWeight.w900),
-          ),
-          content: Text(
-            'Remove ${sale.packageName} × ${sale.quantity} from sales records?',
-          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+          contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
           actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          title: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: _kDanger.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: _kDanger,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Reason for deletion',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${sale.packageName} × ${sale.quantity} — why is this being removed?',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kTextSecondary,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // ── Returned option ──────────────────────────────────────────
+              _DeleteReasonTile(
+                icon: Icons.assignment_return_rounded,
+                color: _kEdit,
+                title: 'Card Returned',
+                subtitle: 'Customer gave the card back → stock increases.',
+                onTap: () => Navigator.pop(dialogContext, DeleteReason.returned),
+              ),
+              const SizedBox(height: 10),
+              // ── Corrupted option ─────────────────────────────────────────
+              _DeleteReasonTile(
+                icon: Icons.broken_image_rounded,
+                color: _kDanger,
+                title: 'Card Corrupted / Lost',
+                subtitle: 'Card is defective or lost → stock decreases.',
+                onTap: () => Navigator.pop(dialogContext, DeleteReason.corrupted),
+              ),
+            ],
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: _kDanger,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              icon: const Icon(
-                Icons.delete_outline_rounded,
-                size: 18,
-              ),
-              label: const Text('Delete'),
             ),
           ],
         );
       },
     );
-
-    return result ?? false;
   }
 
   String get _safeDismissKey {
-    if (sale.id.trim().isNotEmpty) {
-      return 'sale_${sale.id}';
-    }
-
+    if (sale.id.trim().isNotEmpty) return 'sale_${sale.id}';
     return 'sale_${sale.packageName}_${sale.createdAt.microsecondsSinceEpoch}_${sale.quantity}';
   }
 
@@ -1593,7 +1558,8 @@ class _SaleHistoryCard extends StatelessWidget {
     return Dismissible(
       key: ValueKey(_safeDismissKey),
       resizeDuration: null,
-      direction: isSaving ? DismissDirection.none : DismissDirection.horizontal,
+      direction:
+          isSaving ? DismissDirection.none : DismissDirection.horizontal,
       background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
@@ -1602,10 +1568,7 @@ class _SaleHistoryCard extends StatelessWidget {
           color: _kEdit.withOpacity(0.12),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Icon(
-          Icons.edit_rounded,
-          color: _kEdit,
-        ),
+        child: const Icon(Icons.edit_rounded, color: _kEdit),
       ),
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
@@ -1615,10 +1578,7 @@ class _SaleHistoryCard extends StatelessWidget {
           color: _kDanger.withOpacity(0.10),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Icon(
-          Icons.delete_outline_rounded,
-          color: _kDanger,
-        ),
+        child: const Icon(Icons.delete_outline_rounded, color: _kDanger),
       ),
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
@@ -1626,16 +1586,10 @@ class _SaleHistoryCard extends StatelessWidget {
           return false;
         }
 
-        final shouldDelete = await _confirmDelete(context);
-
-        if (shouldDelete) {
-          onDelete(sale);
-        }
-
-        // Do not return true here.
-        // Returning true removes the Dismissible immediately while Firestore may
-        // still return the same item for a moment, which can crash the app.
-        return false;
+        // Right-to-left swipe → ask reason
+        final reason = await _askDeleteReason(context);
+        if (reason != null) onDelete(sale, reason);
+        return false; // let Firestore stream remove it naturally
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
@@ -1645,19 +1599,12 @@ class _SaleHistoryCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: _kBorder),
           boxShadow: const [
-            BoxShadow(
-              color: _kShadow,
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
+            BoxShadow(color: _kShadow, blurRadius: 12, offset: Offset(0, 4)),
           ],
         ),
         child: Row(
           children: [
-            const _SoftIconBox(
-              icon: Icons.receipt_long_rounded,
-              size: 44,
-            ),
+            const _SoftIconBox(icon: Icons.receipt_long_rounded, size: 44),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1723,12 +1670,8 @@ class _SaleHistoryCard extends StatelessWidget {
                         onTap: isSaving
                             ? null
                             : () async {
-                                final shouldDelete =
-                                    await _confirmDelete(context);
-
-                                if (shouldDelete) {
-                                  onDelete(sale);
-                                }
+                                final reason = await _askDeleteReason(context);
+                                if (reason != null) onDelete(sale, reason);
                               },
                       ),
                     ],
@@ -1737,6 +1680,79 @@ class _SaleHistoryCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Delete reason tile (used inside the dialog) ───────────────────────────────
+
+class _DeleteReasonTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _DeleteReasonTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withOpacity(0.06),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 19),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: _kTextSecondary,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded, size: 13, color: color),
+            ],
+          ),
         ),
       ),
     );
@@ -1766,18 +1782,11 @@ class _SaleCardAction extends StatelessWidget {
       child: Opacity(
         opacity: disabled ? 0.45 : 1,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 4,
-            vertical: 3,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 12,
-                color: color,
-              ),
+              Icon(icon, size: 12, color: color),
               const SizedBox(width: 2),
               Text(
                 label,
@@ -1814,64 +1823,55 @@ class _QuantitySheet extends StatefulWidget {
 
 class _QuantitySheetState extends State<_QuantitySheet> {
   late final TextEditingController _controller;
+  late final TextEditingController _commentController;
   late final FocusNode _focusNode;
 
   int _quantity = 1;
   bool _touched = false;
 
-  bool get _hasValidQuantity => _quantity >= 1 && _quantity <= 999;
+  // ── NEW ──────────────────────────────────────────────────────────────────
+  SaleType _saleType = SaleType.normal;
 
+  bool get _hasValidQuantity => _quantity >= 1 && _quantity <= 999;
   double get _total => widget.item.price * (_hasValidQuantity ? _quantity : 0);
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: '1');
+    _commentController = TextEditingController();
     _focusNode = FocusNode();
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _commentController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  int _clampQuantity(int value) {
-    if (value < 1) return 1;
-    if (value > 999) return 999;
-    return value;
-  }
+  int _clampQuantity(int value) => value < 1 ? 1 : (value > 999 ? 999 : value);
 
   void _setQuantity(int value) {
     final next = _clampQuantity(value);
-
     setState(() {
       _quantity = next;
       _touched = true;
     });
-
     _controller.text = next.toString();
     _controller.selection = TextSelection.fromPosition(
       TextPosition(offset: _controller.text.length),
     );
-
     HapticFeedback.selectionClick();
   }
 
   void _handleQuantityText(String value) {
     final parsed = int.tryParse(value);
-
     setState(() {
       _touched = true;
-
-      if (parsed == null) {
-        _quantity = 0;
-      } else {
-        _quantity = parsed > 999 ? 999 : parsed;
-      }
+      _quantity = parsed == null ? 0 : (parsed > 999 ? 999 : parsed);
     });
-
     if (parsed != null && parsed > 999) {
       _controller.text = '999';
       _controller.selection = const TextSelection.collapsed(offset: 3);
@@ -1880,26 +1880,29 @@ class _QuantitySheetState extends State<_QuantitySheet> {
 
   void _confirmSale() {
     final parsed = int.tryParse(_controller.text.trim());
-
     if (parsed == null || parsed < 1) {
       setState(() {
         _quantity = 0;
         _touched = true;
       });
-
       HapticFeedback.heavyImpact();
       return;
     }
 
     final finalQuantity = _clampQuantity(parsed);
+    final comment = _commentController.text.trim();
 
     Navigator.pop(context);
 
+    // Pass saleType and comment to your cubit.
+    // Update your SalesCubit.addSale() signature accordingly.
     widget.salesCubit.addSale(
       centerId: widget.centerId,
       packageName: widget.item.name,
       packagePrice: widget.item.price,
       quantity: finalQuantity,
+      saleType: _saleType,         // ← NEW
+      comment: comment.isEmpty ? null : comment, // ← NEW
     );
   }
 
@@ -1914,9 +1917,7 @@ class _QuantitySheetState extends State<_QuantitySheet> {
       child: Container(
         decoration: const BoxDecoration(
           color: _kBackground,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(30),
-          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: SafeArea(
           top: false,
@@ -1928,12 +1929,11 @@ class _QuantitySheetState extends State<_QuantitySheet> {
               children: [
                 const _BottomSheetHandle(),
                 const SizedBox(height: 20),
+
+                // ── Package header ──────────────────────────────────────
                 Row(
                   children: [
-                    _SoftIconBox(
-                      icon: widget.item.icon,
-                      size: 54,
-                    ),
+                    _SoftIconBox(icon: widget.item.icon, size: 54),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
@@ -1966,6 +1966,8 @@ class _QuantitySheetState extends State<_QuantitySheet> {
                   ],
                 ),
                 const SizedBox(height: 24),
+
+                // ── Quantity ────────────────────────────────────────────
                 const Text(
                   'Quantity',
                   style: TextStyle(
@@ -2004,7 +2006,7 @@ class _QuantitySheetState extends State<_QuantitySheet> {
                           fillColor: _kSurface,
                           hintText: '1',
                           errorText: _touched && !_hasValidQuantity
-                              ? 'Enter 1 - 999'
+                              ? 'Enter 1 – 999'
                               : null,
                           contentPadding: const EdgeInsets.symmetric(
                             vertical: 15,
@@ -2020,10 +2022,7 @@ class _QuantitySheetState extends State<_QuantitySheet> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(18),
-                            borderSide: const BorderSide(
-                              color: _kPrimary,
-                              width: 1.6,
-                            ),
+                            borderSide: const BorderSide(color: _kPrimary, width: 1.6),
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(18),
@@ -2031,10 +2030,7 @@ class _QuantitySheetState extends State<_QuantitySheet> {
                           ),
                           focusedErrorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(18),
-                            borderSide: const BorderSide(
-                              color: _kDanger,
-                              width: 1.4,
-                            ),
+                            borderSide: const BorderSide(color: _kDanger, width: 1.4),
                           ),
                         ),
                         onTap: () {
@@ -2060,11 +2056,81 @@ class _QuantitySheetState extends State<_QuantitySheet> {
                   onSelected: _setQuantity,
                 ),
                 const SizedBox(height: 18),
-                _TotalPreview(
-                  quantity: _quantity,
-                  total: _total,
+                _TotalPreview(quantity: _quantity, total: _total),
+                const SizedBox(height: 22),
+
+                // ── NEW: Sale type ──────────────────────────────────────
+                const Text(
+                  'Sale Type',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: _kTextPrimary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _SaleTypeSelector(
+                  selected: _saleType,
+                  onChanged: (type) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _saleType = type);
+                  },
+                ),
+                const SizedBox(height: 22),
+
+                // ── NEW: Comment ────────────────────────────────────────
+                const Text(
+                  'Note (optional)',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: _kTextPrimary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _commentController,
+                  maxLines: 2,
+                  maxLength: 200,
+                  textInputAction: TextInputAction.done,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _kTextPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. customer name, extra info…',
+                    hintStyle: const TextStyle(
+                      color: _kTextMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    filled: true,
+                    fillColor: _kSurface,
+                    counterStyle: const TextStyle(
+                      fontSize: 11,
+                      color: _kTextMuted,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 13,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: const BorderSide(color: _kBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: const BorderSide(color: _kBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: const BorderSide(color: _kPrimary, width: 1.6),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 18),
+
+                // ── Confirm button ──────────────────────────────────────
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
@@ -2097,6 +2163,146 @@ class _QuantitySheetState extends State<_QuantitySheet> {
   }
 }
 
+// ─── NEW: Sale Type Selector ─────────────────────────────────────────────────
+
+class _SaleTypeSelector extends StatelessWidget {
+  final SaleType selected;
+  final ValueChanged<SaleType> onChanged;
+
+  const _SaleTypeSelector({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _SaleTypeTile(
+          type: SaleType.normal,
+          icon: Icons.point_of_sale_rounded,
+          label: 'Normal',
+          subtitle: 'Paid now',
+          color: _kPrimaryDark,
+          selected: selected == SaleType.normal,
+          onTap: () => onChanged(SaleType.normal),
+        ),
+        const SizedBox(width: 10),
+        _SaleTypeTile(
+          type: SaleType.debt,
+          icon: Icons.schedule_rounded,
+          label: 'Debt',
+          subtitle: 'Pay later',
+          color: _kDebt,
+          selected: selected == SaleType.debt,
+          onTap: () => onChanged(SaleType.debt),
+        ),
+        const SizedBox(width: 10),
+        _SaleTypeTile(
+          type: SaleType.gift,
+          icon: Icons.card_giftcard_rounded,
+          label: 'Gift',
+          subtitle: 'Free / complimentary',
+          color: _kGift,
+          selected: selected == SaleType.gift,
+          onTap: () => onChanged(SaleType.gift),
+        ),
+      ],
+    );
+  }
+}
+
+class _SaleTypeTile extends StatelessWidget {
+  final SaleType type;
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SaleTypeTile({
+    required this.type,
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: selected ? color.withOpacity(0.1) : _kSurface,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: selected ? color.withOpacity(0.55) : _kBorder,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? color.withOpacity(0.18)
+                        : _kSurfaceSoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 19,
+                    color: selected ? color : _kTextMuted,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: selected ? color : _kTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? color.withOpacity(0.75)
+                        : _kTextMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Edit Sale Sheet ─────────────────────────────────────────────────────────
+
 class _EditSaleSheet extends StatefulWidget {
   final SaleHistoryItem sale;
   final String centerId;
@@ -2120,9 +2326,7 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
   bool _touched = false;
 
   bool get _hasValidQuantity => _quantity >= 1 && _quantity <= 999;
-
   bool get _hasChanged => _quantity != widget.sale.quantity;
-
   double get _total =>
       widget.sale.packagePrice * (_hasValidQuantity ? _quantity : 0);
 
@@ -2141,41 +2345,27 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
     super.dispose();
   }
 
-  int _clampQuantity(int value) {
-    if (value < 1) return 1;
-    if (value > 999) return 999;
-    return value;
-  }
+  int _clampQuantity(int value) => value < 1 ? 1 : (value > 999 ? 999 : value);
 
   void _setQuantity(int value) {
     final next = _clampQuantity(value);
-
     setState(() {
       _quantity = next;
       _touched = true;
     });
-
     _controller.text = next.toString();
     _controller.selection = TextSelection.fromPosition(
       TextPosition(offset: _controller.text.length),
     );
-
     HapticFeedback.selectionClick();
   }
 
   void _handleQuantityText(String value) {
     final parsed = int.tryParse(value);
-
     setState(() {
       _touched = true;
-
-      if (parsed == null) {
-        _quantity = 0;
-      } else {
-        _quantity = parsed > 999 ? 999 : parsed;
-      }
+      _quantity = parsed == null ? 0 : (parsed > 999 ? 999 : parsed);
     });
-
     if (parsed != null && parsed > 999) {
       _controller.text = '999';
       _controller.selection = const TextSelection.collapsed(offset: 3);
@@ -2184,19 +2374,16 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
 
   void _confirmEdit() {
     final parsed = int.tryParse(_controller.text.trim());
-
     if (parsed == null || parsed < 1) {
       setState(() {
         _quantity = 0;
         _touched = true;
       });
-
       HapticFeedback.heavyImpact();
       return;
     }
 
     final finalQuantity = _clampQuantity(parsed);
-
     Navigator.pop(context);
 
     widget.salesCubit.editSale(
@@ -2217,9 +2404,7 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
       child: Container(
         decoration: const BoxDecoration(
           color: _kBackground,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(30),
-          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: SafeArea(
           top: false,
@@ -2233,10 +2418,7 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    const _SoftIconBox(
-                      icon: Icons.edit_rounded,
-                      size: 54,
-                    ),
+                    const _SoftIconBox(icon: Icons.edit_rounded, size: 54),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
@@ -2324,7 +2506,7 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
                           fillColor: _kSurface,
                           hintText: '1',
                           errorText: _touched && !_hasValidQuantity
-                              ? 'Enter 1 - 999'
+                              ? 'Enter 1 – 999'
                               : null,
                           contentPadding: const EdgeInsets.symmetric(
                             vertical: 15,
@@ -2340,10 +2522,8 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(18),
-                            borderSide: const BorderSide(
-                              color: _kEdit,
-                              width: 1.6,
-                            ),
+                            borderSide:
+                                const BorderSide(color: _kEdit, width: 1.6),
                           ),
                           errorBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(18),
@@ -2365,9 +2545,7 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
                         },
                         onChanged: _handleQuantityText,
                         onSubmitted: (_) {
-                          if (_hasValidQuantity && _hasChanged) {
-                            _confirmEdit();
-                          }
+                          if (_hasValidQuantity && _hasChanged) _confirmEdit();
                         },
                       ),
                     ),
@@ -2384,10 +2562,7 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
                   onSelected: _setQuantity,
                 ),
                 const SizedBox(height: 18),
-                _TotalPreview(
-                  quantity: _quantity,
-                  total: _total,
-                ),
+                _TotalPreview(quantity: _quantity, total: _total),
                 if (!_hasChanged) ...[
                   const SizedBox(height: 10),
                   const Center(
@@ -2435,6 +2610,8 @@ class _EditSaleSheetState extends State<_EditSaleSheet> {
   }
 }
 
+// ─── Shared Sheet Widgets ────────────────────────────────────────────────────
+
 class _QuickQuantityChips extends StatelessWidget {
   final int selectedQuantity;
   final ValueChanged<int> onSelected;
@@ -2460,8 +2637,9 @@ class _QuickQuantityChips extends StatelessWidget {
             backgroundColor: _kSurface,
             labelStyle: TextStyle(
               fontWeight: FontWeight.w900,
-              color:
-                  selectedQuantity == quantity ? _kPrimaryDark : _kTextSecondary,
+              color: selectedQuantity == quantity
+                  ? _kPrimaryDark
+                  : _kTextSecondary,
             ),
             side: BorderSide(
               color: selectedQuantity == quantity
@@ -2497,10 +2675,7 @@ class _TotalPreview extends StatelessWidget {
   final int quantity;
   final double total;
 
-  const _TotalPreview({
-    required this.quantity,
-    required this.total,
-  });
+  const _TotalPreview({required this.quantity, required this.total});
 
   @override
   Widget build(BuildContext context) {
@@ -2558,7 +2733,7 @@ class _TotalPreview extends StatelessWidget {
   }
 }
 
-// ─── Loading & Saving States ─────────────────────────────────────────────────
+// ─── Loading & Saving States ──────────────────────────────────────────────────
 
 class _LoadingState extends StatelessWidget {
   const _LoadingState();
@@ -2646,16 +2821,13 @@ class _TopSavingBar extends StatelessWidget {
   }
 }
 
-// ─── Quantity Button ─────────────────────────────────────────────────────────
+// ─── Quantity Button ──────────────────────────────────────────────────────────
 
 class _QtyButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _QtyButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _QtyButton({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -2668,23 +2840,16 @@ class _QtyButton extends StatelessWidget {
         child: SizedBox(
           width: 52,
           height: 52,
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: 24,
-          ),
+          child: Icon(icon, color: Colors.white, size: 24),
         ),
       ),
     );
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-SnackBar _buildSnackBar(
-  String message, {
-  bool isError = false,
-}) {
+SnackBar _buildSnackBar(String message, {bool isError = false}) {
   return SnackBar(
     content: Row(
       children: [
@@ -2697,42 +2862,34 @@ SnackBar _buildSnackBar(
         Expanded(
           child: Text(
             message,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
       ],
     ),
     backgroundColor: isError ? _kDanger : _kSuccess,
     behavior: SnackBarBehavior.floating,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(14),
-    ),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
   );
 }
 
-String _money(num value) {
-  return '$_kCurrency${value.toStringAsFixed(0)}';
-}
+String _money(num value) => '$_kCurrency${value.toStringAsFixed(0)}';
 
 String _relativeTime(DateTime date) {
   final diff = DateTime.now().difference(date);
-
   if (diff.inSeconds < 30) return 'Just now';
   if (diff.inMinutes < 1) return '${diff.inSeconds}s ago';
   if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
   if (diff.inHours < 24) return '${diff.inHours}h ago';
   if (diff.inDays == 1) return 'Yesterday';
   if (diff.inDays < 7) return '${diff.inDays}d ago';
-
   return '${date.day.toString().padLeft(2, '0')}/'
       '${date.month.toString().padLeft(2, '0')}/'
       '${date.year}';
 }
 
-// ─── Local Models ────────────────────────────────────────────────────────────
+// ─── Local Models ─────────────────────────────────────────────────────────────
 
 class _PackageOption {
   final String name;
@@ -2748,8 +2905,4 @@ class _PackageOption {
   });
 }
 
-enum _SaleSort {
-  newest,
-  highest,
-  quantity,
-}
+enum _SaleSort { newest, highest, quantity }
