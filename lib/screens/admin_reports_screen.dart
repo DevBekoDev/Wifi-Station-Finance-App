@@ -408,6 +408,17 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
                 child: _CenterCard(
                   center: center,
                   maxSales: maxSales,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => _CenterEditPlaceholderScreen(
+                          centerId: center.centerId,
+                          centerName: center.centerName,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1407,10 +1418,12 @@ class _SummaryCard extends StatelessWidget {
 class _CenterCard extends StatelessWidget {
   final AdminCenterReportItem center;
   final double maxSales;
+  final VoidCallback? onTap;
 
   const _CenterCard({
     required this.center,
     required this.maxSales,
+    this.onTap,
   });
 
   @override
@@ -1426,21 +1439,24 @@ class _CenterCard extends StatelessWidget {
         ? '${((center.profit / center.sales) * 100).toStringAsFixed(1)}%'
         : '—';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _T.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _T.border),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withOpacity(0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        decoration: BoxDecoration(
+          color: _T.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _T.border),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withOpacity(0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
         children: [
           Container(
             height: 3,
@@ -1545,6 +1561,79 @@ class _CenterCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    )
+    );
+  }
+}
+
+class _CenterEditPlaceholderScreen extends StatelessWidget {
+  final String centerId;
+  final String centerName;
+
+  const _CenterEditPlaceholderScreen({
+    required this.centerId,
+    required this.centerName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Edit Center'),
+        backgroundColor: _T.emerald,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              centerName,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Center ID: $centerId',
+              style: const TextStyle(
+                fontSize: 14,
+                color: _T.textMuted,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: _T.surface2,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _T.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text(
+                    'Edit screen placeholder',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'The admin center edit page is not implemented yet. This placeholder will be replaced with the actual editing screen later.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

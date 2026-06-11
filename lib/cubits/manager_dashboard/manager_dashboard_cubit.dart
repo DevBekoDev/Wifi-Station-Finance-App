@@ -64,6 +64,7 @@ class ManagerDashboardCubit extends Cubit<ManagerDashboardState> {
           profit: totalSales - totalExpenses,
           salesCount: salesSnapshot.docs.length,
           expensesCount: expensesSnapshot.docs.length,
+          totalCards: centerData['totalCards'] ?? 0,
         ),
       );
     } catch (e) {

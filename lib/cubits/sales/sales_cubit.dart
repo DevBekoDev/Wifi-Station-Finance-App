@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
+import 'package:wsfm/screens/sales_screen.dart';
 import 'sales_state.dart';
 
 class SalesCubit extends Cubit<SalesState> {
@@ -76,6 +76,8 @@ class SalesCubit extends Cubit<SalesState> {
     required String packageName,
     required double packagePrice,
     required int quantity,
+    required SaleType saleType,   // ← new
+    String? comment,
   }) async {
     if (centerId.trim().isEmpty) {
       emit(
@@ -129,22 +131,38 @@ class SalesCubit extends Cubit<SalesState> {
       final totalAmount = packagePrice * quantity;
       final now = DateTime.now();
       final currentUser = _auth.currentUser;
+      final centerRef = _firestore.collection('centers').doc(centerId);
+      final saleRef = _firestore.collection('sales').doc();
 
-      await _firestore.collection('sales').add({
-        'centerId': centerId,
-        'packageName': packageName,
-        'packagePrice': packagePrice,
-        'quantity': quantity,
-        'totalAmount': totalAmount,
-        'createdBy': currentUser?.uid,
-        'createdAt': FieldValue.serverTimestamp(),
+      await _firestore.runTransaction((transaction) async {
+        final centerSnapshot = await transaction.get(centerRef);
+        if (!centerSnapshot.exists) {
+          throw Exception('Center not found.');
+        }
 
-        // Useful for reports/filtering.
-        'date': _dateString(now),
+        final centerData = centerSnapshot.data();
+        final currentTotalCards = (centerData?['totalCards'] as num?)?.toInt() ?? 0;
 
-        // Useful for future audit/report logic.
-        'updatedAt': null,
-        'updatedBy': null,
+        if (currentTotalCards < quantity) {
+          throw Exception('Not enough cards available in the center.');
+        }
+
+        transaction.update(centerRef, {
+          'totalCards': currentTotalCards - quantity,
+        });
+
+        transaction.set(saleRef, {
+          'centerId': centerId,
+          'packageName': packageName,
+          'packagePrice': packagePrice,
+          'quantity': quantity,
+          'totalAmount': totalAmount,
+          'createdBy': currentUser?.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+          'date': _dateString(now),
+          'updatedAt': null,
+          'updatedBy': null,
+        });
       });
 
       emit(
@@ -153,11 +171,12 @@ class SalesCubit extends Cubit<SalesState> {
           successMessage: 'Sale saved successfully.',
         ),
       );
-    } catch (_) {
+    } catch (error) {
+      final message = error is Exception ? error.toString().replaceFirst('Exception: ', '') : 'Failed to save sale.';
       emit(
         state.copyWith(
           isSaving: false,
-          errorMessage: 'Failed to save sale.',
+          errorMessage: message,
         ),
       );
     }
@@ -276,6 +295,7 @@ class SalesCubit extends Cubit<SalesState> {
   Future<void> deleteSale({
     required String centerId,
     required String saleId,
+    required DeleteReason reason,
   }) async {
     if (centerId.trim().isEmpty) {
       emit(

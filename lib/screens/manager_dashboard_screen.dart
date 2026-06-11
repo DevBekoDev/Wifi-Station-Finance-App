@@ -127,13 +127,13 @@ class _ManagerDashboardView extends StatelessWidget {
                             ? const Color(0xFFEAF2FF)
                             : const Color(0xFFFDECEC),
                       ),
-                      const _MetricCard(
-                        title: 'Status',
-                        value: 'Active',
-                        subtitle: 'Center is running',
+                      _MetricCard(
+                        title: 'Total Cards',
+                        value: data.totalCards.toString(),
+                        subtitle: '${data.totalCards} cards in stock',
                         icon: Icons.wifi_rounded,
-                        accent: Color(0xFF7C3AED),
-                        softAccent: Color(0xFFF1EBFF),
+                        accent: const Color(0xFF7C3AED),
+                        softAccent: const Color(0xFFF1EBFF),
                       ),
                     ],
                   ),
@@ -158,7 +158,7 @@ class _ManagerDashboardView extends StatelessWidget {
                     mainAxisSpacing: 14,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: 1.02,
+                    childAspectRatio: 0.9,
                     children: [
                       _ActionCard(
                         title: 'Sales',

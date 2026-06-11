@@ -14,6 +14,7 @@ class ManagerDashboardLoaded extends ManagerDashboardState {
   final double profit;
   final int salesCount;
   final int expensesCount;
+  final int totalCards;
 
   ManagerDashboardLoaded({
     required this.centerId,
@@ -25,6 +26,7 @@ class ManagerDashboardLoaded extends ManagerDashboardState {
     required this.profit,
     required this.salesCount,
     required this.expensesCount,
+    required this.totalCards,
   });
 }
 

@@ -80,6 +80,7 @@ class CreateCenterCubit extends Cubit<CreateCenterState> {
         'monthlyRevenue': 0,
         'monthlyExpenses': 0,
         'profit': 0,
+        'totalCards': 0,
       });
 
       batch.set(requestRef, {
