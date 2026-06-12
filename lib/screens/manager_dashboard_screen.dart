@@ -5,6 +5,7 @@ import 'package:wsfm/cubits/manager_dashboard/manager_dashboard_state.dart';
 import 'package:wsfm/screens/expenses_screen.dart';
 import 'package:wsfm/screens/reports_screen.dart';
 import 'package:wsfm/screens/sales_screen.dart';
+import 'package:wsfm/utils/logout_button.dart';
 
 class ManagerDashboardScreen extends StatelessWidget {
   final String centerId;
@@ -18,13 +19,15 @@ class ManagerDashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => ManagerDashboardCubit()..loadDashboard(centerId),
-      child: const _ManagerDashboardView(),
+      child: _ManagerDashboardView(centerId: centerId),
     );
   }
 }
 
 class _ManagerDashboardView extends StatelessWidget {
-  const _ManagerDashboardView();
+  final String centerId;
+
+  const _ManagerDashboardView({required this.centerId});
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +35,13 @@ class _ManagerDashboardView extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: backgroundColor,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('Manager Dashboard'),
+        actions: const [
+          LogoutButton(),
+        ],
+      ),
       body: SafeArea(
         child: BlocBuilder<ManagerDashboardCubit, ManagerDashboardState>(
           builder: (context, state) {
@@ -44,25 +54,17 @@ class _ManagerDashboardView extends StatelessWidget {
               return _DashboardErrorView(
                 message: state.message,
                 onRetry: () {
-                  final screen =
-                      context.findAncestorWidgetOfExactType<ManagerDashboardScreen>();
-                  if (screen != null) {
-                    context.read<ManagerDashboardCubit>().loadDashboard(screen.centerId);
-                  }
+                  context.read<ManagerDashboardCubit>().loadDashboard(centerId);
                 },
               );
             }
 
             final data = state as ManagerDashboardLoaded;
-            final screen =
-                context.findAncestorWidgetOfExactType<ManagerDashboardScreen>();
 
             return RefreshIndicator(
               color: const Color(0xFF0B7A75),
               onRefresh: () async {
-                if (screen != null) {
-                  context.read<ManagerDashboardCubit>().loadDashboard(screen.centerId);
-                }
+                context.read<ManagerDashboardCubit>().loadDashboard(centerId);
               },
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
@@ -764,7 +766,6 @@ class _NotesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const textDark = Color(0xFF0F172A);
     const textSoft = Color(0xFF64748B);
 
     final notes = [
