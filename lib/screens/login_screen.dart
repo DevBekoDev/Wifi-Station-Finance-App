@@ -4,6 +4,7 @@ import 'package:wsfm/cubits/auth/auth_cubit.dart';
 import 'package:wsfm/cubits/auth/auth_state.dart';
 import 'package:wsfm/screens/admin_dashboard_screen.dart';
 import 'package:wsfm/screens/manager_dashboard_screen.dart';
+import 'package:wsfm/utils/app_routes.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -139,26 +140,33 @@ class _LoginScreenState extends State<LoginScreen>
             errorMessage = state.message;
           });
         }
-
-        if (state is AuthSuccess) {
-          if (state.role == 'admin') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AdminDashboardScreen(),
-              ),
-            );
-          } else if (state.role == 'manager') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ManagerDashboardScreen(
-                  centerId: state.centerId ?? '',
-                ),
-              ),
-            );
-          }
-        }
+if (state is AuthSuccess) {
+  if (state.role == 'admin') {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        settings: const RouteSettings(
+          name: AppRoutes.adminDashboard,
+        ),
+        builder: (_) => const AdminDashboardScreen(),
+      ),
+      (route) => false,
+    );
+  } else if (state.role == 'manager') {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        settings: const RouteSettings(
+          name: AppRoutes.managerDashboard,
+        ),
+        builder: (_) => ManagerDashboardScreen(
+          centerId: state.centerId ?? '',
+        ),
+      ),
+      (route) => false,
+    );
+  }
+}
       },
       child: Scaffold(
         body: Container(
