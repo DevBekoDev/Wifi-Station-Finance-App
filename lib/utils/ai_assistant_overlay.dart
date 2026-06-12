@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:wsfm/utils/app_navigator_key.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AiAssistantConnector {
   const AiAssistantConnector({
@@ -212,6 +214,22 @@ class AiMessage {
 
   final AiMessageRole role;
   final String text;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'role': role.name,
+      'text': text,
+    };
+  }
+
+  factory AiMessage.fromMap(Map<String, dynamic> map) {
+    return AiMessage(
+      role: map['role'] == 'user'
+          ? AiMessageRole.user
+          : AiMessageRole.assistant,
+      text: map['text'] ?? '',
+    );
+  }
 }
 
 class AiAssistantChatSheet extends StatefulWidget {
@@ -227,19 +245,76 @@ class AiAssistantChatSheet extends StatefulWidget {
 }
 
 class _AiAssistantChatSheetState extends State<AiAssistantChatSheet> {
+  @override
+void initState() {
+  super.initState();
+  _loadMessages();
+}
+Future<void> _loadMessages() async {
+  final prefs = await SharedPreferences.getInstance();
+  final savedMessages = prefs.getStringList(_storageKey);
+
+  if (savedMessages == null || savedMessages.isEmpty) {
+    _messages.add(_welcomeMessage);
+  } else {
+    _messages.addAll(
+      savedMessages.map((messageJson) {
+        final decoded = jsonDecode(messageJson) as Map<String, dynamic>;
+        return AiMessage.fromMap(decoded);
+      }),
+    );
+  }
+
+  if (mounted) {
+    setState(() {
+      _isLoadingMessages = false;
+    });
+  }
+
+  _scrollToBottom();
+}
+
+Future<void> _saveMessages() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final encodedMessages = _messages.map((message) {
+    return jsonEncode(message.toMap());
+  }).toList();
+
+  await prefs.setStringList(_storageKey, encodedMessages);
+}
+
+Future<void> _clearMessages() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  await prefs.remove(_storageKey);
+
+  setState(() {
+    _messages
+      ..clear()
+      ..add(_welcomeMessage);
+  });
+
+  _scrollToBottom();
+}
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  final List<AiMessage> _messages = [
-    AiMessage(
-      role: AiMessageRole.assistant,
-      text:
-          'Hi, I am your WSFM AI assistant. Ask me about sales, expenses, center reports, or daily finance.',
-    ),
-  ];
+static const String _storageKey = 'wsfm_ai_chat_messages';
 
-  bool _isSending = false;
-  bool _isListening = false;
+final List<AiMessage> _messages = [];
+
+bool _isSending = false;
+bool _isListening = false;
+bool _isLoadingMessages = true;
+
+AiMessage get _welcomeMessage {
+  return AiMessage(
+    role: AiMessageRole.assistant,
+    text:
+        'Hi, I am your WSFM AI assistant. Ask me about sales, expenses, center reports, or daily finance.',
+  );
+}
 
   @override
   void dispose() {
@@ -253,22 +328,24 @@ class _AiAssistantChatSheetState extends State<AiAssistantChatSheet> {
 
     if (text.isEmpty || _isSending) return;
 
-    setState(() {
-      _messages.add(AiMessage(role: AiMessageRole.user, text: text));
-      _inputController.clear();
-      _isSending = true;
-    });
+setState(() {
+  _messages.add(AiMessage(role: AiMessageRole.user, text: text));
+  _inputController.clear();
+  _isSending = true;
+});
 
-    _scrollToBottom();
+await _saveMessages();
+_scrollToBottom();
 
     try {
       final answer = await widget.connector.sendText(text);
 
       setState(() {
-        _messages.add(AiMessage(role: AiMessageRole.assistant, text: answer));
-      });
+  _messages.add(AiMessage(role: AiMessageRole.assistant, text: answer));
+});
 
-      _scrollToBottom();
+await _saveMessages();
+_scrollToBottom();
     } catch (_) {
       setState(() {
         _messages.add(
@@ -442,35 +519,52 @@ class _AiAssistantChatSheetState extends State<AiAssistantChatSheet> {
               ],
             ),
           ),
-          IconButton(
-            onPressed: _speakLastAssistantMessage,
-            icon: const Icon(
-              Icons.volume_up_rounded,
-              color: Colors.white,
-            ),
-          ),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(
-              Icons.close_rounded,
-              color: Colors.white,
-            ),
-          ),
+         IconButton(
+  tooltip: 'Clear chat',
+  onPressed: _clearMessages,
+  icon: const Icon(
+    Icons.delete_outline_rounded,
+    color: Colors.white,
+  ),
+),
+IconButton(
+  tooltip: 'Speak last answer',
+  onPressed: _speakLastAssistantMessage,
+  icon: const Icon(
+    Icons.volume_up_rounded,
+    color: Colors.white,
+  ),
+),
+IconButton(
+  onPressed: () => Navigator.pop(context),
+  icon: const Icon(
+    Icons.close_rounded,
+    color: Colors.white,
+  ),
+),
         ],
       ),
     );
   }
 
-  Widget _buildMessages() {
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      itemCount: _messages.length,
-      itemBuilder: (context, index) {
-        return AiMessageBubble(message: _messages[index]);
-      },
+Widget _buildMessages() {
+  if (_isLoadingMessages) {
+    return const Center(
+      child: CircularProgressIndicator(
+        color: Colors.white,
+      ),
     );
   }
+
+  return ListView.builder(
+    controller: _scrollController,
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+    itemCount: _messages.length,
+    itemBuilder: (context, index) {
+      return AiMessageBubble(message: _messages[index]);
+    },
+  );
+}
 
   Widget _buildTypingIndicator() {
     return Padding(
