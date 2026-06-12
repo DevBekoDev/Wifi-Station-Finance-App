@@ -5,6 +5,7 @@ import 'package:wsfm/cubits/auth/auth_state.dart';
 import 'package:wsfm/screens/admin_dashboard_screen.dart';
 import 'package:wsfm/screens/manager_dashboard_screen.dart';
 import 'package:wsfm/utils/app_routes.dart';
+import 'package:wsfm/services/ai/ai_user_session.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -141,6 +142,10 @@ class _LoginScreenState extends State<LoginScreen>
           });
         }
 if (state is AuthSuccess) {
+  AiUserSession.setUser(
+  userRole: state.role,
+  userCenterId: state.centerId,
+);
   if (state.role == 'admin') {
     Navigator.pushAndRemoveUntil(
       context,
