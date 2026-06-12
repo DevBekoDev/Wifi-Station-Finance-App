@@ -4,6 +4,7 @@ import 'package:wsfm/cubits/admin_dashboard/admin_dashboard_cubit.dart';
 import 'package:wsfm/cubits/admin_dashboard/admin_dashboard_state.dart';
 import 'package:wsfm/services/admin_report_export_serviVe.dart';
 import 'package:wsfm/screens/create_center_screen.dart';
+import 'package:wsfm/utils/logout_button.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:wsfm/screens/admin_center_edit.dart';
 import 'package:wsfm/screens/admin_reports_screen.dart';
@@ -27,6 +28,14 @@ class _AdminDashboardView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _DashColors.pageBg,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor:  _DashColors.pageBg,
+        title: Center(child: const Text('WSFM',style: TextStyle(color: Colors.black))),
+        actions: const [
+          LogoutButton(),
+        ],
+      ),
       body: SafeArea(
         child: BlocBuilder<AdminDashboardCubit, AdminDashboardState>(
           builder: (context, state) {
@@ -51,8 +60,8 @@ class _AdminDashboardView extends StatelessWidget {
                 final summaryCrossAxisCount = width >= 1100
                     ? 4
                     : width >= 700
-                    ? 2
-                    : 2;
+                        ? 2
+                        : 2;
 
                 return RefreshIndicator(
                   color: _DashColors.primary,
@@ -103,21 +112,6 @@ class _AdminDashboardView extends StatelessWidget {
                                   icon: Icons.confirmation_number_rounded,
                                   accent: _DashColors.primary,
                                 ),
-
-                                // _SummaryCard(
-                                //   title: 'Total Centers',
-                                //   value: data.totalCenters.toString(),
-                                //   subtitle: 'All registered branches',
-                                //   icon: Icons.wifi_rounded,
-                                //   accent: _DashColors.primary,
-                                // ),
-                                // _SummaryCard(
-                                //   title: 'Managers',
-                                //   value: data.totalManagers.toString(),
-                                //   subtitle: 'Active manager accounts',
-                                //   icon: Icons.people_alt_rounded,
-                                //   accent: _DashColors.blue,
-                                // ),
                                 _SummaryCard(
                                   title: 'Revenue',
                                   value:
@@ -211,7 +205,11 @@ class _AdminDashboardView extends StatelessWidget {
                               subtitle:
                                   'Recently created centers with manager assignment details.',
                               actionText: 'Refresh',
-                              onTap: () {},
+                              onTap: () {
+                                context
+                                    .read<AdminDashboardCubit>()
+                                    .loadDashboard();
+                              },
                               trailing: _SmallBadge(
                                 label: '${data.totalCenters} centers',
                               ),
@@ -232,7 +230,9 @@ class _AdminDashboardView extends StatelessWidget {
                                         vertical: 32,
                                       ),
                                       child: Center(
-                                        child: CircularProgressIndicator(),
+                                        child: CircularProgressIndicator(
+                                          color: _DashColors.primary,
+                                        ),
                                       ),
                                     );
                                   }
@@ -262,7 +262,7 @@ class _AdminDashboardView extends StatelessWidget {
                                       index,
                                     ) {
                                       final doc = docs[index];
-                                      final data =
+                                      final centerData =
                                           doc.data() as Map<String, dynamic>;
 
                                       return Padding(
@@ -272,13 +272,11 @@ class _AdminDashboardView extends StatelessWidget {
                                               : 12,
                                         ),
                                         child: _CenterTile(
-                                          name:
-                                              data['name'] ?? 'Unknown Center',
-                                          location:
-                                              data['location'] ??
+                                          name: centerData['name'] ??
+                                              'Unknown Center',
+                                          location: centerData['location'] ??
                                               'Unknown Location',
-                                          manager:
-                                              data['managerName'] ??
+                                          manager: centerData['managerName'] ??
                                               'No Manager',
                                           centerId: doc.id,
                                         ),
@@ -518,10 +516,13 @@ class _CircleIconButton extends StatelessWidget {
 
     if (onTap == null) return button;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: button,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: button,
+      ),
     );
   }
 }
@@ -738,39 +739,6 @@ class _MonthlyReportHero extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isTight = constraints.maxWidth < 560;
-
-          final content = [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Monthly Finance Report',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    'Review revenue, expenses, and overall center comparisons from the admin reports area.',
-                    style: TextStyle(
-                      color: Colors.white,
-                      height: 1.5,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12, height: 12),
-            ElevatedButton.icon(
-              onPressed: null,
-              icon: Icon(Icons.open_in_new_rounded),
-              label: Text('Open report'),
-            ),
-          ];
 
           if (isTight) {
             return Column(

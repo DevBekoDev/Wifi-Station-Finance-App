@@ -143,34 +143,15 @@ class _LoginScreenState extends State<LoginScreen>
         }
 if (state is AuthSuccess) {
   AiUserSession.setUser(
-  userRole: state.role,
-  userCenterId: state.centerId,
-);
-  if (state.role == 'admin') {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        settings: const RouteSettings(
-          name: AppRoutes.adminDashboard,
-        ),
-        builder: (_) => const AdminDashboardScreen(),
-      ),
-      (route) => false,
-    );
-  } else if (state.role == 'manager') {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        settings: const RouteSettings(
-          name: AppRoutes.managerDashboard,
-        ),
-        builder: (_) => ManagerDashboardScreen(
-          centerId: state.centerId ?? '',
-        ),
-      ),
-      (route) => false,
-    );
-  }
+    userRole: state.role,
+    userCenterId: state.centerId,
+  );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  });
 }
       },
       child: Scaffold(

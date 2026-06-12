@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:wsfm/utils/app_navigator_key.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AiAssistantConnector {
   const AiAssistantConnector({
@@ -254,18 +255,30 @@ void initState() {
   _loadMessages();
 }
 Future<void> _loadMessages() async {
-  final prefs = await SharedPreferences.getInstance();
-  final savedMessages = prefs.getStringList(_storageKey);
+  try {
+    final prefs = await SharedPreferences.getInstance();
 
-  if (savedMessages == null || savedMessages.isEmpty) {
-    _messages.add(_welcomeMessage);
-  } else {
-    _messages.addAll(
-      savedMessages.map((messageJson) {
-        final decoded = jsonDecode(messageJson) as Map<String, dynamic>;
-        return AiMessage.fromMap(decoded);
-      }),
-    );
+    // Remove old shared chat history so users do not see each other's old messages.
+    await prefs.remove(_legacyStorageKey);
+
+    final savedMessages = prefs.getStringList(_storageKey);
+
+    if (savedMessages == null || savedMessages.isEmpty) {
+      _messages.add(_welcomeMessage);
+    } else {
+      _messages.addAll(
+        savedMessages.map((messageJson) {
+          final decoded = jsonDecode(messageJson) as Map<String, dynamic>;
+          return AiMessage.fromMap(decoded);
+        }),
+      );
+    }
+  } catch (e) {
+    _messages
+      ..clear()
+      ..add(_welcomeMessage);
+
+    debugPrint('Failed to load AI messages: $e');
   }
 
   if (mounted) {
@@ -278,13 +291,17 @@ Future<void> _loadMessages() async {
 }
 
 Future<void> _saveMessages() async {
-  final prefs = await SharedPreferences.getInstance();
+  try {
+    final prefs = await SharedPreferences.getInstance();
 
-  final encodedMessages = _messages.map((message) {
-    return jsonEncode(message.toMap());
-  }).toList();
+    final encodedMessages = _messages.map((message) {
+      return jsonEncode(message.toMap());
+    }).toList();
 
-  await prefs.setStringList(_storageKey, encodedMessages);
+    await prefs.setStringList(_storageKey, encodedMessages);
+  } catch (e) {
+    debugPrint('Failed to save AI messages: $e');
+  }
 }
 
 Future<void> _clearMessages() async {
@@ -303,7 +320,17 @@ Future<void> _clearMessages() async {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-static const String _storageKey = 'wsfm_ai_chat_messages';
+static const String _legacyStorageKey = 'wsfm_ai_chat_messages';
+
+String get _storageKey {
+  final user = FirebaseAuth.instance.currentUser;
+
+  if (user == null) {
+    return 'wsfm_ai_chat_messages_guest';
+  }
+
+  return 'wsfm_ai_chat_messages_${user.uid}';
+}
 
 final List<AiMessage> _messages = [];
 
@@ -357,17 +384,21 @@ _scrollToBottom();
 
 await _saveMessages();
 _scrollToBottom();
-    } catch (_) {
-      setState(() {
-        _messages.add(
-          AiMessage(
-            role: AiMessageRole.assistant,
-            text:
-                'Sorry, I could not connect to the AI service right now. Please try again.',
-          ),
-        );
-      });
-    } finally {
+    } catch (e, stackTrace) {
+  debugPrint('AI ASSISTANT ERROR: $e');
+  debugPrint('AI ASSISTANT STACK: $stackTrace');
+
+  setState(() {
+    _messages.add(
+      AiMessage(
+        role: AiMessageRole.assistant,
+        text: 'AI error: $e',
+      ),
+    );
+  });
+
+  await _saveMessages();
+} finally {
       if (mounted) {
         setState(() => _isSending = false);
       }
