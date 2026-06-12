@@ -12,7 +12,10 @@ class AiAssistantConnector {
     this.speakAssistantMessage,
   });
 
-  final Future<String> Function(String message) sendText;
+  final Future<String> Function(
+  String message,
+  List<Map<String, String>> history,
+) sendText;
   final Future<String?> Function()? listenToUser;
   final Future<void> Function(String text)? speakAssistantMessage;
 }
@@ -327,7 +330,12 @@ AiMessage get _welcomeMessage {
     final text = _inputController.text.trim();
 
     if (text.isEmpty || _isSending) return;
-
+final historyBeforeNewMessage = _messages.map((message) {
+  return {
+    'role': message.role == AiMessageRole.user ? 'user' : 'assistant',
+    'text': message.text,
+  };
+}).toList();
 setState(() {
   _messages.add(AiMessage(role: AiMessageRole.user, text: text));
   _inputController.clear();
@@ -338,7 +346,10 @@ await _saveMessages();
 _scrollToBottom();
 
     try {
-      final answer = await widget.connector.sendText(text);
+      final answer = await widget.connector.sendText(
+  text,
+  historyBeforeNewMessage,
+);
 
       setState(() {
   _messages.add(AiMessage(role: AiMessageRole.assistant, text: answer));
