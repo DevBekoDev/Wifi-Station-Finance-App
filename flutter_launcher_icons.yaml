@@ -1,0 +1,11 @@
+flutter_launcher_icons:
+  android: true
+  ios: true
+
+  image_path: "assets/images/wsfm_app_icon_transparent.png"
+
+  adaptive_icon_background: "#F4F7F9"
+  adaptive_icon_foreground: "assets/images/wsfm_app_icon_transparent.png"
+
+  remove_alpha_ios: true
+  background_color_ios: "#F4F7F9"

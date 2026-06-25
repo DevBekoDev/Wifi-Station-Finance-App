@@ -1,111 +1,435 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-void main() {
+import 'package:wsfm/cubits/auth/auth_cubit.dart';
+import 'package:wsfm/utils/constants/app_theme.dart';
+
+import 'services/firebase_options.dart';
+import 'screens/starting_screen.dart';
+
+import 'screens/admin_dashboard_screen.dart';
+import 'screens/manager_dashboard_screen.dart';
+
+import 'services/ai/ai_user_session.dart';
+import 'services/ai/direct_gemini_finance_assistant_service.dart';
+import 'services/ai/finance_ai_context_service.dart';
+
+import 'utils/ai_assistant_overlay.dart';
+import 'utils/ai_voice_controller.dart';
+import 'utils/ai_route_observer.dart';
+import 'utils/app_routes.dart';
+import 'utils/app_navigator_key.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  static final AiVoiceController aiVoiceController = AiVoiceController();
+
+  static final FinanceAiContextService financeContextService =
+      FinanceAiContextService();
+
+  static const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+
+  static final DirectGeminiFinanceAssistantService geminiService =
+      DirectGeminiFinanceAssistantService(
+    apiKey: geminiApiKey,
+  );
+
+  static int aiMaxTokensForQuestion(String message) {
+    final text = message.toLowerCase();
+
+    final asksEachCenter = text.contains('each center') ||
+        text.contains('every center') ||
+        text.contains('per center') ||
+        text.contains('center by center') ||
+        text.contains('each centre') ||
+        text.contains('every centre');
+
+    if (asksEachCenter) {
+      return 1400;
+    }
+
+    final asksAnalysis = text.contains('why') ||
+        text.contains('improve') ||
+        text.contains('advice') ||
+        text.contains('analyze') ||
+        text.contains('analyse') ||
+        text.contains('recommend') ||
+        text.contains('problem') ||
+        text.contains('low') ||
+        text.contains('reduce') ||
+        text.contains('increase');
+
+    if (asksAnalysis) {
+      return 900;
+    }
+
+    final asksReport = text.contains('report') ||
+        text.contains('summary') ||
+        text.contains('details') ||
+        text.contains('data');
+
+    if (asksReport) {
+      return 700;
+    }
+
+    final asksSimpleNumber = text.contains('total') ||
+        text.contains('profit') ||
+        text.contains('sales') ||
+        text.contains('expenses') ||
+        text.contains('cards');
+
+    if (asksSimpleNumber) {
+      return 300;
+    }
+
+    return 450;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FLKFJASDLKFJKLASDFJLKSDAFJKLDSJF',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+    return BlocProvider(
+      create: (context) => AuthCubit(),
+      child: MaterialApp(
+        navigatorKey: appNavigatorKey,
+        debugShowCheckedModeBanner: false,
+        title: 'wsfm',
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.system,
+        navigatorObservers: [
+          aiRouteObserver,
+        ],
+        builder: (context, child) {
+          return AiAssistantOverlay(
+            currentRouteListenable: currentRouteName,
+
+            // Hide AI only on public/auth screens.
+            // Do NOT put adminDashboard, managerDashboard, sales, expenses, reports here.
+            hiddenRoutes: const {
+              AppRoutes.home,
+              AppRoutes.start,
+              AppRoutes.login,
+              AppRoutes.signup,
+            },
+
+            connector: AiAssistantConnector(
+              sendText: (message, history) async {
+                final directAnswer =
+                    await financeContextService.tryAnswerDirectly(
+                  question: message,
+                  isAdmin: AiUserSession.isAdmin,
+                  managerCenterId: AiUserSession.centerId,
+                );
+
+                if (directAnswer != null) {
+                  return directAnswer;
+                }
+
+                String financeContext;
+
+                if (AiUserSession.isAdmin) {
+                  financeContext =
+                      await financeContextService.buildSmartAdminFinanceContext(
+                    question: message,
+                  );
+                } else {
+                  final centerId = AiUserSession.centerId;
+
+                  if (centerId == null || centerId.isEmpty) {
+                    return 'No center ID found for this manager user.';
+                  }
+
+                  financeContext = await financeContextService
+                      .buildSmartManagerFinanceContext(
+                    question: message,
+                    managerCenterId: centerId,
+                  );
+                }
+
+                return geminiService.ask(
+                  message: message,
+                  financeContext: financeContext,
+                  history: history,
+                  maxOutputTokens: aiMaxTokensForQuestion(message),
+                );
+              },
+              listenToUser: aiVoiceController.listenOnce,
+              speakAssistantMessage: aiVoiceController.speak,
+            ),
+
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+        home: const AuthGate(),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+  Future<_SessionUserData> _loadUserData(User user) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+      if (!doc.exists || doc.data() == null) {
+        return const _SessionUserData.invalid(
+          'User account data was not found. Please contact the admin.',
+        );
+      }
 
-  final String title;
+      final data = doc.data()!;
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
+      final role = (data['role'] ?? '').toString().trim().toLowerCase();
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+      final centerId = (data['centerId'] ??
+              data['centerID'] ??
+              data['center_id'] ??
+              data['assignedCenterId'] ??
+              '')
+          .toString()
+          .trim();
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+      if (role == 'admin') {
+        AiUserSession.setUser(
+          userRole: 'admin',
+          userCenterId: null,
+        );
+
+        return const _SessionUserData.admin();
+      }
+
+      if (role == 'manager') {
+        if (centerId.isEmpty) {
+          return const _SessionUserData.invalid(
+            'No center ID found for this manager user.',
+          );
+        }
+
+        AiUserSession.setUser(
+          userRole: 'manager',
+          userCenterId: centerId,
+        );
+
+        return _SessionUserData.manager(centerId);
+      }
+
+      return _SessionUserData.invalid(
+        'Unknown user role: $role',
+      );
+    } catch (e) {
+      return _SessionUserData.invalid(
+        'Failed to load user session: $e',
+      );
+    }
+  }
+
+  void _clearAiSession() {
+    AiUserSession.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, authSnapshot) {
+        if (authSnapshot.connectionState == ConnectionState.waiting) {
+          return const AiRouteMarker(
+            routeName: AppRoutes.start,
+            child: _SessionLoadingScreen(),
+          );
+        }
+
+        final user = authSnapshot.data;
+
+        if (user == null) {
+          _clearAiSession();
+
+          return const AiRouteMarker(
+            routeName: AppRoutes.start,
+            child: StartScreen(),
+          );
+        }
+
+        return FutureBuilder<_SessionUserData>(
+          future: _loadUserData(user),
+          builder: (context, userSnapshot) {
+            if (userSnapshot.connectionState == ConnectionState.waiting) {
+              return const AiRouteMarker(
+                routeName: AppRoutes.start,
+                child: _SessionLoadingScreen(),
+              );
+            }
+
+            final sessionData = userSnapshot.data;
+
+            if (sessionData == null ||
+                sessionData.type == _SessionType.invalid) {
+              return AiRouteMarker(
+                routeName: AppRoutes.start,
+                child: _SessionProblemScreen(
+                  message: sessionData?.message ??
+                      'Could not restore the saved login session.',
+                ),
+              );
+            }
+
+            if (sessionData.type == _SessionType.admin) {
+              return const AiRouteMarker(
+                routeName: AppRoutes.adminDashboard,
+                child: AdminDashboardScreen(),
+              );
+            }
+
+            if (sessionData.type == _SessionType.manager) {
+              return AiRouteMarker(
+                routeName: AppRoutes.managerDashboard,
+                child: ManagerDashboardScreen(
+                  centerId: sessionData.centerId,
+                ),
+              );
+            }
+
+            return const AiRouteMarker(
+              routeName: AppRoutes.start,
+              child: StartScreen(),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class AiRouteMarker extends StatelessWidget {
+  const AiRouteMarker({
+    super.key,
+    required this.routeName,
+    required this.child,
+  });
+
+  final String routeName;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (currentRouteName.value != routeName) {
+        currentRouteName.value = routeName;
+      }
+    });
+
+    return child;
+  }
+}
+
+class _SessionLoadingScreen extends StatelessWidget {
+  const _SessionLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}
+
+class _SessionProblemScreen extends StatelessWidget {
+  final String message;
+
+  const _SessionProblemScreen({
+    required this.message,
+  });
+
+  Future<void> _logout() async {
+    AiUserSession.clear();
+    await FirebaseAuth.instance.signOut();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 56,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _logout,
+                icon: const Icon(Icons.logout),
+                label: const Text('Logout'),
+              ),
+            ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
     );
   }
+}
+
+enum _SessionType {
+  admin,
+  manager,
+  invalid,
+}
+
+class _SessionUserData {
+  final _SessionType type;
+  final String centerId;
+  final String? message;
+
+  const _SessionUserData._({
+    required this.type,
+    this.centerId = '',
+    this.message,
+  });
+
+  const _SessionUserData.admin()
+      : this._(
+          type: _SessionType.admin,
+        );
+
+  const _SessionUserData.manager(String centerId)
+      : this._(
+          type: _SessionType.manager,
+          centerId: centerId,
+        );
+
+  const _SessionUserData.invalid(String message)
+      : this._(
+          type: _SessionType.invalid,
+          message: message,
+        );
 }
