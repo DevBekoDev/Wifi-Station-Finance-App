@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import 'package:wsfm/cubits/auth/auth_cubit.dart';
 import 'package:wsfm/screens/login_screen.dart';
 import 'package:wsfm/screens/manager_activation_screen.dart';
+import 'package:wsfm/utils/app_routes.dart';
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
 class _C {
-  static const bg        = Color(0xFF051F20);
-  static const bg2       = Color(0xFF0B2B26);
-  static const bg3       = Color(0xFF163832);
-  static const accent    = Color(0xFF235347);
-  static const mint      = Color(0xFF8EB69B);
+  static const bg = Color(0xFF051F20);
+  static const bg2 = Color(0xFF0B2B26);
+  static const bg3 = Color(0xFF163832);
+  static const accent = Color(0xFF235347);
+  static const mint = Color(0xFF8EB69B);
   static const mintLight = Color(0xFFDAF1DE);
-  static const surface   = Color(0xFFF7FBF8);
-  static const card      = Color(0xFFFFFFFF);
-  static const textDark  = Color(0xFF1B2B26);
-  static const textMid   = Color(0xFF4A6358);
+  static const surface = Color(0xFFF7FBF8);
+  static const card = Color(0xFFFFFFFF);
+  static const textDark = Color(0xFF1B2B26);
+  static const textMid = Color(0xFF4A6358);
   static const textMuted = Color(0xFF8FA99E);
 }
 
@@ -37,6 +39,7 @@ class _StartScreenState extends State<StartScreen>
   @override
   void initState() {
     super.initState();
+
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -46,19 +49,31 @@ class _StartScreenState extends State<StartScreen>
       parent: _ctrl,
       curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
     );
-    _slideHero = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
-        .animate(CurvedAnimation(
-            parent: _ctrl,
-            curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic)));
+
+    _slideHero = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+      ),
+    );
 
     _fadePanel = CurvedAnimation(
       parent: _ctrl,
       curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
     );
-    _slidePanel = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
-        .animate(CurvedAnimation(
-            parent: _ctrl,
-            curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic)));
+
+    _slidePanel = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOutCubic),
+      ),
+    );
 
     _ctrl.forward();
   }
@@ -69,62 +84,138 @@ class _StartScreenState extends State<StartScreen>
     super.dispose();
   }
 
+  void _openLogin(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        settings: const RouteSettings(
+          name: AppRoutes.login,
+        ),
+        builder: (_) => BlocProvider(
+          create: (_) => AuthCubit(),
+          child: const LoginScreen(),
+        ),
+      ),
+    );
+  }
+
+  void _openManagerActivation(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        settings: const RouteSettings(
+          name: '/manager-activation',
+        ),
+        builder: (_) => const ManagerActivationScreen(),
+      ),
+    );
+  }
+
+  void _showAboutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text('About WSFM'),
+        content: const Text(
+          'WSFM helps admins and managers manage WiFi station finances, centers, sales, expenses, and reports.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _C.surface,
       body: SafeArea(
-        child: LayoutBuilder(builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          final isWide = w >= 900;
-          final isTablet = w >= 600 && w < 900;
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final isWide = w >= 900;
+            final isTablet = w >= 600 && w < 900;
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: isWide ? 1200 : 700),
-              child: Padding(
-                padding: EdgeInsets.all(isWide ? 24 : 16),
-                child: isWide
-                    ? Row(children: [
-                        Expanded(
-                            flex: 11,
-                            child: FadeTransition(
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isWide ? 1200 : 700,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(isWide ? 24 : 16),
+                  child: isWide
+                      ? Row(
+                          children: [
+                            Expanded(
+                              flex: 11,
+                              child: FadeTransition(
                                 opacity: _fadeHero,
                                 child: SlideTransition(
-                                    position: _slideHero,
-                                    child: _HeroPanel(large: true)))),
-                        const SizedBox(width: 20),
-                        Expanded(
-                            flex: 10,
-                            child: FadeTransition(
+                                  position: _slideHero,
+                                  child: const _HeroPanel(large: true),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            Expanded(
+                              flex: 10,
+                              child: FadeTransition(
                                 opacity: _fadePanel,
                                 child: SlideTransition(
-                                    position: _slidePanel,
-                                    child: _ActionPanel(
-                                        crossAxisCount: 2,
-                                        childAspectRatio: 1.15)))),
-                      ])
-                    : Column(children: [
-                        FadeTransition(
-                            opacity: _fadeHero,
-                            child: SlideTransition(
+                                  position: _slidePanel,
+                                  child: _ActionPanel(
+                                    crossAxisCount: 2,
+                                    childAspectRatio: 1.15,
+                                    onAdminTap: _openLogin,
+                                    onManagerTap: _openLogin,
+                                    onActivateTap: _openManagerActivation,
+                                    onAboutTap: _showAboutDialog,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            FadeTransition(
+                              opacity: _fadeHero,
+                              child: SlideTransition(
                                 position: _slideHero,
-                                child: _HeroPanel(large: isTablet))),
-                        const SizedBox(height: 14),
-                        Expanded(
-                            child: FadeTransition(
+                                child: _HeroPanel(large: isTablet),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Expanded(
+                              child: FadeTransition(
                                 opacity: _fadePanel,
                                 child: SlideTransition(
-                                    position: _slidePanel,
-                                    child: _ActionPanel(
-                                        crossAxisCount: 2,
-                                        childAspectRatio:
-                                            isTablet ? 1.12 : 0.98)))),
-                      ]),
+                                  position: _slidePanel,
+                                  child: _ActionPanel(
+                                    crossAxisCount: 2,
+                                    childAspectRatio: isTablet ? 1.12 : 0.98,
+                                    onAdminTap: _openLogin,
+                                    onManagerTap: _openLogin,
+                                    onActivateTap: _openManagerActivation,
+                                    onAboutTap: _showAboutDialog,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
   }
@@ -133,7 +224,10 @@ class _StartScreenState extends State<StartScreen>
 // ─── Hero Panel ───────────────────────────────────────────────────────────────
 class _HeroPanel extends StatelessWidget {
   final bool large;
-  const _HeroPanel({required this.large});
+
+  const _HeroPanel({
+    required this.large,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -162,26 +256,31 @@ class _HeroPanel extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Decorative rings
           Positioned(
-            top: -50, right: -50,
-            child: _Ring(size: large ? 200 : 150, opacity: 0.06),
+            top: -50,
+            right: -50,
+            child: _Ring(
+              size: large ? 200 : 150,
+              opacity: 0.06,
+            ),
           ),
           Positioned(
-            bottom: -30, left: -30,
-            child: _Ring(size: large ? 130 : 90, opacity: 0.04),
+            bottom: -30,
+            left: -30,
+            child: _Ring(
+              size: large ? 130 : 90,
+              opacity: 0.04,
+            ),
           ),
-          // Badge
-          Positioned(
-            top: 20, left: 20,
+          const Positioned(
+            top: 20,
+            left: 20,
             child: _StatusBadge(),
           ),
-          // Main content
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Logo container
                 Container(
                   width: containerSize,
                   height: containerSize,
@@ -200,7 +299,6 @@ class _HeroPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 18),
-                // App name
                 Text(
                   'WSFM',
                   style: TextStyle(
@@ -220,7 +318,6 @@ class _HeroPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Mint accent bar
                 Container(
                   width: large ? 48 : 36,
                   height: 3,
@@ -241,7 +338,11 @@ class _HeroPanel extends StatelessWidget {
 class _Ring extends StatelessWidget {
   final double size;
   final double opacity;
-  const _Ring({required this.size, required this.opacity});
+
+  const _Ring({
+    required this.size,
+    required this.opacity,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -260,14 +361,22 @@ class _Ring extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
+  const _StatusBadge();
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         color: _C.mint.withOpacity(0.12),
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: _C.mint.withOpacity(0.22), width: 1),
+        border: Border.all(
+          color: _C.mint.withOpacity(0.22),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -275,13 +384,13 @@ class _StatusBadge extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: _C.mint,
             ),
           ),
           const SizedBox(width: 6),
-          Text(
+          const Text(
             'v2.0 · WSFM',
             style: TextStyle(
               color: _C.mint,
@@ -300,10 +409,18 @@ class _StatusBadge extends StatelessWidget {
 class _ActionPanel extends StatelessWidget {
   final int crossAxisCount;
   final double childAspectRatio;
+  final void Function(BuildContext context) onAdminTap;
+  final void Function(BuildContext context) onManagerTap;
+  final void Function(BuildContext context) onActivateTap;
+  final void Function(BuildContext context) onAboutTap;
 
   const _ActionPanel({
     required this.crossAxisCount,
     required this.childAspectRatio,
+    required this.onAdminTap,
+    required this.onManagerTap,
+    required this.onActivateTap,
+    required this.onAboutTap,
   });
 
   @override
@@ -318,15 +435,7 @@ class _ActionPanel extends StatelessWidget {
         iconColor: const Color(0xFF3B6D11),
         tagBg: const Color(0xFFEAF3DE),
         tagColor: const Color(0xFF3B6D11),
-        onTap: (ctx) => Navigator.push(
-          ctx,
-          MaterialPageRoute(
-            builder: (_) => BlocProvider(
-              create: (_) => AuthCubit(),
-              child: const LoginScreen(),
-            ),
-          ),
-        ),
+        onTap: onAdminTap,
       ),
       _ActionItem(
         icon: Icons.storefront_rounded,
@@ -337,15 +446,7 @@ class _ActionPanel extends StatelessWidget {
         iconColor: const Color(0xFF185FA5),
         tagBg: const Color(0xFFE6F1FB),
         tagColor: const Color(0xFF185FA5),
-        onTap: (ctx) => Navigator.push(
-          ctx,
-          MaterialPageRoute(
-            builder: (_) => BlocProvider(
-              create: (_) => AuthCubit(),
-              child: const LoginScreen(),
-            ),
-          ),
-        ),
+        onTap: onManagerTap,
       ),
       _ActionItem(
         icon: Icons.person_add_rounded,
@@ -356,12 +457,7 @@ class _ActionPanel extends StatelessWidget {
         iconColor: const Color(0xFF854F0B),
         tagBg: const Color(0xFFFAEEDA),
         tagColor: const Color(0xFF854F0B),
-        onTap: (ctx) => Navigator.push(
-          ctx,
-          MaterialPageRoute(
-            builder: (_) => const ManagerActivationScreen(),
-          ),
-        ),
+        onTap: onActivateTap,
       ),
       _ActionItem(
         icon: Icons.info_outline_rounded,
@@ -372,24 +468,7 @@ class _ActionPanel extends StatelessWidget {
         iconColor: const Color(0xFF5F5E5A),
         tagBg: Colors.transparent,
         tagColor: Colors.transparent,
-        onTap: (ctx) => showDialog(
-          context: ctx,
-          builder: (_) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: const Text('About WSFM'),
-            content: const Text(
-              'WSFM helps admins and managers manage WiFi station finances, centers, sales, expenses, and reports.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Got it'),
-              ),
-            ],
-          ),
-        ),
+        onTap: onAboutTap,
       ),
     ];
 
@@ -415,8 +494,8 @@ class _ActionPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 2, bottom: 14),
+            const Padding(
+              padding: EdgeInsets.only(left: 2, bottom: 14),
               child: Text(
                 'QUICK ACCESS',
                 style: TextStyle(
@@ -437,8 +516,11 @@ class _ActionPanel extends StatelessWidget {
                   mainAxisSpacing: 10,
                   childAspectRatio: childAspectRatio,
                 ),
-                itemBuilder: (context, i) =>
-                    _ActionCard(item: actions[i]),
+                itemBuilder: (context, i) {
+                  return _ActionCard(
+                    item: actions[i],
+                  );
+                },
               ),
             ),
           ],
@@ -458,7 +540,7 @@ class _ActionItem {
   final Color iconColor;
   final Color tagBg;
   final Color tagColor;
-  final void Function(BuildContext) onTap;
+  final void Function(BuildContext context) onTap;
 
   const _ActionItem({
     required this.icon,
@@ -475,7 +557,10 @@ class _ActionItem {
 
 class _ActionCard extends StatefulWidget {
   final _ActionItem item;
-  const _ActionCard({required this.item});
+
+  const _ActionCard({
+    required this.item,
+  });
 
   @override
   State<_ActionCard> createState() => _ActionCardState();
@@ -487,12 +572,23 @@ class _ActionCardState extends State<_ActionCard> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
+      onTapDown: (_) {
+        setState(() {
+          _pressed = true;
+        });
+      },
       onTapUp: (_) {
-        setState(() => _pressed = false);
+        setState(() {
+          _pressed = false;
+        });
+
         widget.item.onTap(context);
       },
-      onTapCancel: () => setState(() => _pressed = false),
+      onTapCancel: () {
+        setState(() {
+          _pressed = false;
+        });
+      },
       child: AnimatedScale(
         scale: _pressed ? 0.96 : 1.0,
         duration: const Duration(milliseconds: 100),
@@ -512,7 +608,6 @@ class _ActionCardState extends State<_ActionCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Icon
               Container(
                 width: 40,
                 height: 40,
@@ -527,7 +622,6 @@ class _ActionCardState extends State<_ActionCard> {
                 ),
               ),
               const SizedBox(height: 12),
-              // Label
               Text(
                 widget.item.label,
                 style: const TextStyle(
@@ -538,7 +632,6 @@ class _ActionCardState extends State<_ActionCard> {
                 ),
               ),
               const SizedBox(height: 3),
-              // Description
               Text(
                 widget.item.description,
                 style: const TextStyle(
@@ -547,7 +640,6 @@ class _ActionCardState extends State<_ActionCard> {
                   height: 1.3,
                 ),
               ),
-              // Tag
               if (widget.item.tag != null) ...[
                 const SizedBox(height: 8),
                 Container(

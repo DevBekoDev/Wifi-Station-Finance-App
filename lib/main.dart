@@ -10,7 +10,6 @@ import 'package:wsfm/utils/constants/app_theme.dart';
 import 'services/firebase_options.dart';
 import 'screens/starting_screen.dart';
 
-// Change these imports if your dashboard files are in another folder
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/manager_dashboard_screen.dart';
 
@@ -115,59 +114,66 @@ class MyApp extends StatelessWidget {
           aiRouteObserver,
         ],
         builder: (context, child) {
-  return AiAssistantOverlay(
-    currentRouteListenable: currentRouteName,
-    hiddenRoutes: const {
-      AppRoutes.login,
-      AppRoutes.signup,
-    },
-    connector: AiAssistantConnector(
-      sendText: (message, history) async {
-        final directAnswer =
-            await financeContextService.tryAnswerDirectly(
-          question: message,
-          isAdmin: AiUserSession.isAdmin,
-          managerCenterId: AiUserSession.centerId,
-        );
+          return AiAssistantOverlay(
+            currentRouteListenable: currentRouteName,
 
-        if (directAnswer != null) {
-          return directAnswer;
-        }
+            // Hide AI only on public/auth screens.
+            // Do NOT put adminDashboard, managerDashboard, sales, expenses, reports here.
+            hiddenRoutes: const {
+              AppRoutes.home,
+              AppRoutes.start,
+              AppRoutes.login,
+              AppRoutes.signup,
+            },
 
-        String financeContext;
+            connector: AiAssistantConnector(
+              sendText: (message, history) async {
+                final directAnswer =
+                    await financeContextService.tryAnswerDirectly(
+                  question: message,
+                  isAdmin: AiUserSession.isAdmin,
+                  managerCenterId: AiUserSession.centerId,
+                );
 
-        if (AiUserSession.isAdmin) {
-          financeContext =
-              await financeContextService.buildSmartAdminFinanceContext(
-            question: message,
+                if (directAnswer != null) {
+                  return directAnswer;
+                }
+
+                String financeContext;
+
+                if (AiUserSession.isAdmin) {
+                  financeContext =
+                      await financeContextService.buildSmartAdminFinanceContext(
+                    question: message,
+                  );
+                } else {
+                  final centerId = AiUserSession.centerId;
+
+                  if (centerId == null || centerId.isEmpty) {
+                    return 'No center ID found for this manager user.';
+                  }
+
+                  financeContext = await financeContextService
+                      .buildSmartManagerFinanceContext(
+                    question: message,
+                    managerCenterId: centerId,
+                  );
+                }
+
+                return geminiService.ask(
+                  message: message,
+                  financeContext: financeContext,
+                  history: history,
+                  maxOutputTokens: aiMaxTokensForQuestion(message),
+                );
+              },
+              listenToUser: aiVoiceController.listenOnce,
+              speakAssistantMessage: aiVoiceController.speak,
+            ),
+
+            child: child ?? const SizedBox.shrink(),
           );
-        } else {
-          final centerId = AiUserSession.centerId;
-
-          if (centerId == null || centerId.isEmpty) {
-            return 'No center ID found for this manager user.';
-          }
-
-          financeContext = await financeContextService
-              .buildSmartManagerFinanceContext(
-            question: message,
-            managerCenterId: centerId,
-          );
-        }
-
-        return geminiService.ask(
-          message: message,
-          financeContext: financeContext,
-          history: history,
-          maxOutputTokens: aiMaxTokensForQuestion(message),
-        );
-      },
-      listenToUser: aiVoiceController.listenOnce,
-      speakAssistantMessage: aiVoiceController.speak,
-    ),
-    child: child ?? const SizedBox.shrink(),
-  );
-},
+        },
         home: const AuthGate(),
       ),
     );
@@ -203,10 +209,11 @@ class AuthGate extends StatelessWidget {
           .trim();
 
       if (role == 'admin') {
- AiUserSession.setUser(
-  userRole: 'admin',
-  userCenterId: null,
-);
+        AiUserSession.setUser(
+          userRole: 'admin',
+          userCenterId: null,
+        );
+
         return const _SessionUserData.admin();
       }
 
@@ -217,10 +224,10 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-       AiUserSession.setUser(
-  userRole: 'manager',
-  userCenterId: centerId,
-);
+        AiUserSession.setUser(
+          userRole: 'manager',
+          userCenterId: centerId,
+        );
 
         return _SessionUserData.manager(centerId);
       }
@@ -245,47 +252,92 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnapshot) {
         if (authSnapshot.connectionState == ConnectionState.waiting) {
-          return const _SessionLoadingScreen();
+          return const AiRouteMarker(
+            routeName: AppRoutes.start,
+            child: _SessionLoadingScreen(),
+          );
         }
 
         final user = authSnapshot.data;
 
         if (user == null) {
           _clearAiSession();
-          return const StartScreen();
+
+          return const AiRouteMarker(
+            routeName: AppRoutes.start,
+            child: StartScreen(),
+          );
         }
 
         return FutureBuilder<_SessionUserData>(
           future: _loadUserData(user),
           builder: (context, userSnapshot) {
             if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const _SessionLoadingScreen();
+              return const AiRouteMarker(
+                routeName: AppRoutes.start,
+                child: _SessionLoadingScreen(),
+              );
             }
 
             final sessionData = userSnapshot.data;
 
-            if (sessionData == null || sessionData.type == _SessionType.invalid) {
-              return _SessionProblemScreen(
-                message: sessionData?.message ??
-                    'Could not restore the saved login session.',
+            if (sessionData == null ||
+                sessionData.type == _SessionType.invalid) {
+              return AiRouteMarker(
+                routeName: AppRoutes.start,
+                child: _SessionProblemScreen(
+                  message: sessionData?.message ??
+                      'Could not restore the saved login session.',
+                ),
               );
             }
 
             if (sessionData.type == _SessionType.admin) {
-              return const AdminDashboardScreen();
-            }
-
-            if (sessionData.type == _SessionType.manager) {
-              return ManagerDashboardScreen(
-                centerId: sessionData.centerId,
+              return const AiRouteMarker(
+                routeName: AppRoutes.adminDashboard,
+                child: AdminDashboardScreen(),
               );
             }
 
-            return const StartScreen();
+            if (sessionData.type == _SessionType.manager) {
+              return AiRouteMarker(
+                routeName: AppRoutes.managerDashboard,
+                child: ManagerDashboardScreen(
+                  centerId: sessionData.centerId,
+                ),
+              );
+            }
+
+            return const AiRouteMarker(
+              routeName: AppRoutes.start,
+              child: StartScreen(),
+            );
           },
         );
       },
     );
+  }
+}
+
+class AiRouteMarker extends StatelessWidget {
+  const AiRouteMarker({
+    super.key,
+    required this.routeName,
+    required this.child,
+  });
+
+  final String routeName;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (currentRouteName.value != routeName) {
+        currentRouteName.value = routeName;
+      }
+    });
+
+    return child;
   }
 }
 
@@ -310,7 +362,7 @@ class _SessionProblemScreen extends StatelessWidget {
   });
 
   Future<void> _logout() async {
-  AiUserSession.clear();
+    AiUserSession.clear();
     await FirebaseAuth.instance.signOut();
   }
 
