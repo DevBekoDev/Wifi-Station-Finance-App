@@ -36,12 +36,22 @@ class _ManagerDashboardView extends StatelessWidget {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('Manager Dashboard'),
-        actions: const [
-          LogoutButton(),
-        ],
+        backgroundColor: backgroundColor,
+  automaticallyImplyLeading: false,
+  title: Row(
+    children: [
+      Image.asset(
+        'assets/images/logo.png',
+        height: 36,
       ),
+     
+    
+    ],
+  ),
+  actions: const [
+    LogoutButton(),
+  ],
+),
       body: SafeArea(
         child: BlocBuilder<ManagerDashboardCubit, ManagerDashboardState>(
           builder: (context, state) {

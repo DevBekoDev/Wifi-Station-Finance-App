@@ -78,7 +78,7 @@ Future<void> _openAssistant() async {
         ValueListenableBuilder<String?>(
           valueListenable: widget.currentRouteListenable,
           builder: (context, routeName, _) {
-        if (_isAssistantOpen || widget.hiddenRoutes.contains(routeName)) {
+ if (_isAssistantOpen || widget.hiddenRoutes.contains(routeName)) {
   return const SizedBox.shrink();
 }
 

@@ -29,13 +29,22 @@ class _AdminDashboardView extends StatelessWidget {
     return Scaffold(
       backgroundColor: _DashColors.pageBg,
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor:  _DashColors.pageBg,
-        title: Center(child: const Text('WSFM',style: TextStyle(color: Colors.black))),
-        actions: const [
-          LogoutButton(),
-        ],
+        backgroundColor: _DashColors.pageBg,
+  automaticallyImplyLeading: false,
+  title: Row(
+    children: [
+      Image.asset(
+        'assets/images/logo.png',
+        height: 36,
       ),
+     
+    
+    ],
+  ),
+  actions: const [
+    LogoutButton(),
+  ],
+),
       body: SafeArea(
         child: BlocBuilder<AdminDashboardCubit, AdminDashboardState>(
           builder: (context, state) {
